@@ -31,7 +31,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  cursor: none;
+  cursor: default;
 }
 
 body::before {
@@ -129,7 +129,7 @@ body::after {
   background:transparent; border:1px solid var(--green-dim);
   color:var(--green); font-family:'Share Tech Mono',monospace;
   font-size:15px; letter-spacing:0.3em;
-  padding:13px 52px; cursor:none;
+  padding:13px 52px; cursor:pointer;
   transition:border-color 0.2s,background 0.2s;
 }
 #btn-play:hover{border-color:var(--green);background:var(--green-faint);}
@@ -147,7 +147,7 @@ body::after {
   display:none; background:transparent;
   border:1px solid var(--green-dark); color:var(--green-dim);
   font-family:'Share Tech Mono',monospace; font-size:14px;
-  letter-spacing:0.25em; padding:11px 38px; cursor:none;
+  letter-spacing:0.25em; padding:11px 38px; cursor:pointer;
   transition:border-color 0.2s,color 0.2s;
 }
 #btn-intro-continue:hover{border-color:var(--green);color:var(--green);}
@@ -198,7 +198,7 @@ body::after {
   background:transparent; border:1px solid var(--green-dark);
   color:var(--green-dim); font-family:'Share Tech Mono',monospace;
   font-size:13px; letter-spacing:0.1em;
-  padding:5px 13px; cursor:none;
+  padding:5px 13px; cursor:pointer;
   transition:border-color 0.15s,color 0.15s,background 0.15s;
 }
 .cmd-btn.unlocked{border-color:var(--green-dim);color:var(--green);}
@@ -252,7 +252,7 @@ body::after {
 .end-btn {
   background:transparent; border:1px solid #333; color:#666;
   font-family:'Share Tech Mono',monospace; font-size:15px;
-  letter-spacing:0.2em; padding:10px 32px; cursor:none;
+  letter-spacing:0.2em; padding:10px 32px; cursor:pointer;
   transition:border-color 0.2s,color 0.2s;
 }
 .end-btn:hover{border-color:#888;color:var(--white);}
