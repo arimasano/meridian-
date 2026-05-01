@@ -880,6 +880,10 @@ async function startGame() {
   act = 1;
   unlockedIndex = 0;
   initAudio();
+  const ambient = new Audio('sounds/ambient.mp3');
+  ambient.loop = true;
+  ambient.volume = 0.35;
+  ambient.play().catch(() => {});
   buildCommands();
   scheduleHint();
 }
