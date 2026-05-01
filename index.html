@@ -946,9 +946,6 @@ async function playShutdown() {
   osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
   osc.start(); osc.stop(audioCtx.currentTime + 5.5);
 }
-  osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
-  osc.start(); osc.stop(audioCtx.currentTime + 5.5);
-}
 
 // ══ FIN ══
 async function startEnding() {
