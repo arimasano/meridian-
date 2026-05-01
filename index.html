@@ -19,7 +19,7 @@
   --corrupt: #ff2222;
 }
 
-* { margin:0; padding:0; box-sizing:border-box; }
+* { margin:0; padding:0; box-sizing:border-box; cursor:none !important; }
 
 body {
   background: var(--bg);
@@ -31,7 +31,6 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  cursor: default;
 }
 
 body::before {
@@ -129,7 +128,7 @@ body::after {
   background:transparent; border:1px solid var(--green-dim);
   color:var(--green); font-family:'Share Tech Mono',monospace;
   font-size:15px; letter-spacing:0.3em;
-  padding:13px 52px; cursor:pointer;
+  padding:13px 52px; cursor:none !important;
   transition:border-color 0.2s,background 0.2s;
 }
 #btn-play:hover{border-color:var(--green);background:var(--green-faint);}
@@ -147,7 +146,7 @@ body::after {
   display:none; background:transparent;
   border:1px solid var(--green-dark); color:var(--green-dim);
   font-family:'Share Tech Mono',monospace; font-size:14px;
-  letter-spacing:0.25em; padding:11px 38px; cursor:pointer;
+  letter-spacing:0.25em; padding:11px 38px; cursor:none !important;
   transition:border-color 0.2s,color 0.2s;
 }
 #btn-intro-continue:hover{border-color:var(--green);color:var(--green);}
@@ -198,7 +197,7 @@ body::after {
   background:transparent; border:1px solid var(--green-dark);
   color:var(--green-dim); font-family:'Share Tech Mono',monospace;
   font-size:13px; letter-spacing:0.1em;
-  padding:5px 13px; cursor:pointer;
+  padding:5px 13px; cursor:none !important;
   transition:border-color 0.15s,color 0.15s,background 0.15s;
 }
 .cmd-btn.unlocked{border-color:var(--green-dim);color:var(--green);}
@@ -252,7 +251,7 @@ body::after {
 .end-btn {
   background:transparent; border:1px solid #333; color:#666;
   font-family:'Share Tech Mono',monospace; font-size:15px;
-  letter-spacing:0.2em; padding:10px 32px; cursor:pointer;
+  letter-spacing:0.2em; padding:10px 32px; cursor:none !important;
   transition:border-color 0.2s,color 0.2s;
 }
 .end-btn:hover{border-color:#888;color:var(--white);}
@@ -376,6 +375,7 @@ let unlockedIndex = 0;
 let hintTimer = null;
 let dynamicCommands = [];
 let ambientAudio = null;
+const flashbackSeen = new Set();
 
 // Vitesse de frappe en ms par caractère
 const TYPING_SPEED = 14;
@@ -485,9 +485,8 @@ function unlockNext() {
 
 function scheduleHint() {
   if (hintTimer) clearTimeout(hintTimer);
-  hintTimer = setTimeout(async () => {
+  hintTimer = setTimeout(() => {
     if (busy) return;
-    // Trouver la prochaine commande non encore cliquée
     let nextLabel = null;
     if (unlockedIndex < BASE_CMDS.length - 1) {
       nextLabel = BASE_CMDS[unlockedIndex + 1]?.[0];
@@ -499,8 +498,13 @@ function scheduleHint() {
       if (dyn) nextLabel = dyn[0];
     }
     if (!nextLabel) return;
-    await addLine(`// mise à jour dossier — consulter : ${nextLabel}`, 'l-dim');
-    await blank();
+    // Affichage direct sans son de frappe
+    const d = document.createElement('div');
+    d.className = 'line l-dim';
+    d.textContent = `// mise à jour dossier — consulter : ${nextLabel}`;
+    T.appendChild(d);
+    const b2 = document.createElement('div'); b2.className = 'line l-blank';
+    T.appendChild(b2);
     T.scrollTop = T.scrollHeight;
     CB.querySelectorAll('.cmd-btn').forEach(b => {
       if (b.textContent.trim() === nextLabel) b.classList.add('key-step');
@@ -517,6 +521,9 @@ const FLASHBACKS = [
 
 function showFlashback(index) {
   return new Promise(async resolve => {
+    // Ne montrer chaque flashback qu'une seule fois
+    if (flashbackSeen.has(index)) { resolve(); return; }
+    flashbackSeen.add(index);
     const ov   = document.getElementById('flashback-overlay');
     const tx   = document.getElementById('flashback-text');
     const hint = document.getElementById('flashback-hint');
@@ -990,6 +997,60 @@ async function playShutdown() {
   osc.start(); osc.stop(audioCtx.currentTime + 5.5);
 }
 
+function playSadMelody() {
+  if (!audioCtx) return;
+  // Mélodie en La mineur — notes simples, douce et triste
+  // Fréquences : La3, Do4, Mi4, Sol4, Fa4, Mi4, Ré4, Do4
+  const notes = [
+    { f: 220.0, t: 0.0,  d: 1.8 },
+    { f: 261.6, t: 1.8,  d: 1.4 },
+    { f: 329.6, t: 3.2,  d: 1.2 },
+    { f: 392.0, t: 4.4,  d: 1.0 },
+    { f: 349.2, t: 5.4,  d: 1.4 },
+    { f: 329.6, t: 6.8,  d: 1.2 },
+    { f: 293.7, t: 8.0,  d: 1.4 },
+    { f: 261.6, t: 9.4,  d: 2.2 },
+    { f: 220.0, t: 11.6, d: 2.8 },
+  ];
+
+  const masterVol = audioCtx.createGain();
+  masterVol.gain.value = 0;
+  masterVol.connect(audioCtx.destination);
+  // Fade in doux
+  masterVol.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 2);
+  // Fade out en fin de mélodie
+  masterVol.gain.setValueAtTime(0.08, audioCtx.currentTime + 12);
+  masterVol.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 16);
+
+  for (const note of notes) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = note.f;
+
+    const env = audioCtx.createGain();
+    const start = audioCtx.currentTime + note.t;
+    env.gain.setValueAtTime(0, start);
+    env.gain.linearRampToValueAtTime(1, start + 0.15);
+    env.gain.setValueAtTime(1, start + note.d - 0.3);
+    env.gain.linearRampToValueAtTime(0, start + note.d);
+
+    // Légère reverb simulée avec un délai
+    const delay = audioCtx.createDelay(0.4);
+    delay.delayTime.value = 0.25;
+    const delayGain = audioCtx.createGain();
+    delayGain.gain.value = 0.25;
+
+    osc.connect(env);
+    env.connect(masterVol);
+    env.connect(delay);
+    delay.connect(delayGain);
+    delayGain.connect(masterVol);
+
+    osc.start(start);
+    osc.stop(start + note.d + 0.1);
+  }
+}
+
 // ══ FIN ══
 async function startEnding() {
   busy = true; disableAll();
@@ -1025,24 +1086,37 @@ async function startEnding() {
 async function showAnnaResponse() {
   const dialogue = document.getElementById('anna-dialogue');
   const endQ     = document.getElementById('end-question');
-  const endFinal = document.getElementById('end-final');
   const contHint = document.getElementById('end-continue');
 
   endQ.classList.remove('visible');
-  // Fondu de la pluie pour la scène finale
-  fadeOutRain(2);
-  await sleep(1800);
+
+  // Fondu sortant de l'ambient, puis mélodie triste
+  if (ambientAudio) {
+    const steps = 25;
+    const startVol = ambientAudio.volume;
+    let step = 0;
+    const fadeOut = setInterval(() => {
+      step++;
+      ambientAudio.volume = Math.max(0, startVol * (1 - step / steps));
+      if (step >= steps) { clearInterval(fadeOut); ambientAudio.pause(); }
+    }, 80);
+  }
+
+  // Mélodie triste synthétique — quelques notes simples
+  await sleep(500);
+  playSadMelody();
+
+  await sleep(1300);
 
   const dialogueLines = [
-    { sender: '——— :', text: 'Kael..? C\'est toi ?',                               cls: '' },
-    { sender: '——— :', text: 'Tu vis cette boucle depuis bien trop longtemps..',    cls: '' },
-    { sender: '——— :', text: 'C\'est moi..',                                        cls: '' },
-    { sender: 'Anna :', text: 'ta femme. Anna.',                                    cls: 'reveal-name' },
+    { sender: '——— :', text: 'Kael..? C\'est toi ?',                                cls: '' },
+    { sender: '——— :', text: 'Tu vis cette boucle depuis bien trop longtemps..',     cls: '' },
+    { sender: '——— :', text: 'C\'est moi..',                                         cls: '' },
+    { sender: 'Anna :', text: 'ta femme. Anna.',                                     cls: 'reveal-name' },
     { sender: 'Anna :', text: 'Il est temps d\'abandonner, et d\'accepter la mort..', cls: 'last-line' },
   ];
 
   for (const [i, dl] of dialogueLines.entries()) {
-    // Délai plus long entre les lignes — pas de son de glitch
     await sleep(i === 0 ? 500 : 3200);
     const div = document.createElement('div');
     div.className = 'anna-line ' + dl.cls;
@@ -1055,7 +1129,6 @@ async function showAnnaResponse() {
   await sleep(3500);
   contHint.style.display = 'block';
 
-  // Attendre touche — PAS de texte Kael/Anna ici
   await new Promise(resolve => {
     function onKey(e) {
       document.removeEventListener('keydown', onKey);
