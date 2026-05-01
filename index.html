@@ -375,27 +375,45 @@ let busy = false;
 let unlockedIndex = 0;
 let hintTimer = null;
 let dynamicCommands = [];
+let ambientAudio = null;
+
+// Vitesse de frappe en ms par caractère
+const TYPING_SPEED = 28;
 
 function addLine(text, cls='l-resp', delay=0) {
   return new Promise(async resolve => {
     if (delay) await sleep(delay);
     const d = document.createElement('div');
     d.className = 'line ' + cls;
-    // Typage caractère par caractère avec son
-    const plain = text.replace(/<[^>]*>/g, ''); // texte brut pour compter les chars
-    d.innerHTML = text;
-    d.style.opacity = '0';
     T.appendChild(d);
     T.scrollTop = T.scrollHeight;
-    d.style.opacity = '1';
-    // Son de frappe : 1 clic par ~3 caractères, espacé
-    const charCount = plain.length;
-    const clickCount = Math.ceil(charCount / 3);
-    const interval = Math.min(60, Math.max(18, (charCount * 12) / clickCount));
-    for (let i = 0; i < clickCount; i++) {
-      playKeyClick();
-      await sleep(interval + Math.random() * 15);
+
+    // Lignes vides ou séparateurs — pas de typage
+    if (!text || cls === 'l-blank' || cls === 'l-sep') {
+      d.innerHTML = text;
+      resolve();
+      return;
     }
+
+    // Construire la liste des caractères en ignorant les balises HTML
+    // On type le texte brut, puis on set innerHTML d'un coup à la fin
+    const plain = text.replace(/<[^>]*>/g, '');
+
+    // Typage lettre par lettre sur le texte brut visible
+    // Pour les lignes avec HTML on affiche tout d'un coup après le typage
+    let displayed = '';
+    for (let i = 0; i < plain.length; i++) {
+      displayed += plain[i];
+      d.textContent = displayed;
+      T.scrollTop = T.scrollHeight;
+      // Son à chaque caractère, légèrement aléatoire
+      if (plain[i] !== ' ') playKeyClick();
+      await sleep(TYPING_SPEED + Math.random() * 12);
+    }
+
+    // Remplace par le HTML complet à la fin (pour les spans de couleur etc.)
+    d.innerHTML = text;
+    T.scrollTop = T.scrollHeight;
     resolve();
   });
 }
@@ -502,10 +520,23 @@ function showFlashback(index) {
     const ov   = document.getElementById('flashback-overlay');
     const tx   = document.getElementById('flashback-text');
     const hint = document.getElementById('flashback-hint');
+
+    // Glitch puis lancer le flashback immédiatement — fondu audio en parallèle
     await glitch(300);
-    // Fondu sortant du son terminal
-    fadeOutRain(1.5);
-    if (droneGain && audioCtx) droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
+
+    // Fondu sortant du son — en parallèle, on n'attend pas
+    if (ambientAudio) {
+      const startVol = ambientAudio.volume;
+      const steps = 20;
+      let step = 0;
+      const fadeOut = setInterval(() => {
+        step++;
+        ambientAudio.volume = Math.max(0, startVol * (1 - step / steps));
+        if (step >= steps) clearInterval(fadeOut);
+      }, 80);
+    }
+
+    // Lancer le flashback sans attendre le fondu
     ov.classList.add('active');
     tx.innerHTML = FLASHBACKS[index];
     hint.classList.remove('visible');
@@ -514,6 +545,7 @@ function showFlashback(index) {
     tx.classList.add('visible');
     await sleep(1400);
     hint.classList.add('visible');
+
     function onKey(e) {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
@@ -526,10 +558,18 @@ function showFlashback(index) {
       hint.classList.remove('visible');
       await sleep(700);
       ov.classList.remove('active');
-      // Fondu entrant du son terminal
       await sleep(300);
-      fadeInRain();
-      if (droneGain && audioCtx) droneGain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 2);
+      // Fondu entrant du son — en parallèle
+      if (ambientAudio) {
+        const targetVol = 0.35;
+        const steps = 20;
+        let step = 0;
+        const fadeIn = setInterval(() => {
+          step++;
+          ambientAudio.volume = Math.min(targetVol, targetVol * (step / steps));
+          if (step >= steps) clearInterval(fadeIn);
+        }, 100);
+      }
       resolve();
     }
     document.addEventListener('keydown', onKey);
@@ -880,10 +920,10 @@ async function startGame() {
   act = 1;
   unlockedIndex = 0;
   initAudio();
-  const ambient = new Audio('sounds/ambient.mp3');
-  ambient.loop = true;
-  ambient.volume = 0.35;
-  ambient.play().catch(() => {});
+  ambientAudio = new Audio('sounds/ambient.mp3');
+  ambientAudio.loop = true;
+  ambientAudio.volume = 0.35;
+  ambientAudio.play().catch(() => {});
   buildCommands();
   scheduleHint();
 }
