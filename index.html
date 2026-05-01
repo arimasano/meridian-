@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MERIDIAN — Dossier AK-2134</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+:root {
+  --green: #00ff41;
+  --green-dim: #00aa2a;
+  --green-dark: #003310;
+  --green-faint: #001a08;
+  --red: #ff3333;
+  --amber: #ffaa00;
+  --white: #e8e8e8;
+  --bg: #010801;
+  --corrupt: #ff2222;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--green);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: none;
+}
+
+/* Scanlines */
+body::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0px, rgba(0,0,0,0.12) 1px, transparent 1px, transparent 4px);
+  pointer-events:none;
+  z-index:200;
+}
+
+/* Vignette */
+body::after {
+  content:'';
+  position:fixed;
+  inset:0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.85) 100%);
+  pointer-events:none;
+  z-index:199;
+}
+
+#cursor {
+  position:fixed;
+  width:10px; height:10px;
+  border:1px solid var(--green);
+  pointer-events:none;
+  z-index:999;
+  transform:translate(-50%,-50%);
+  transition: transform 0.05s;
+}
+#cursor::after {
+  content:'';
+  position:absolute;
+  inset:2px;
+  background:var(--green);
+  opacity:0.6;
+}
+
+/* ── MENU ── */
+#menu {
+  position:fixed;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:48px;
+  z-index:300;
+  background: var(--bg);
+}
+
+#menu-title {
+  text-align:center;
+  line-height:1.2;
+}
+
+#menu-title .m-main {
+  font-family:'VT323', monospace;
+  font-size:72px;
+  color:var(--green);
+  letter-spacing:0.3em;
+  display:block;
+  animation: flicker-slow 8s infinite;
+}
+
+#menu-title .m-sub {
+  font-size:12px;
+  color:var(--green-dim);
+  letter-spacing:0.25em;
+  display:block;
+  margin-top:8px;
+}
+
+#menu-title .m-dossier {
+  font-size:11px;
+  color: #005510;
+  letter-spacing:0.2em;
+  display:block;
+  margin-top:4px;
+}
+
+#btn-play {
+  background:transparent;
+  border:1px solid var(--green-dim);
+  color:var(--green);
+  font-family:'Share Tech Mono', monospace;
+  font-size:14px;
+  letter-spacing:0.3em;
+  padding:12px 48px;
+  cursor:none;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+#btn-play:hover {
+  border-color:var(--green);
+  background: var(--green-faint);
+}
+
+.menu-loop {
+  font-size:10px;
+  color: #003310;
+  letter-spacing:0.15em;
+}
+
+/* ── HEADER ── */
+#header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:5px 16px;
+  border-bottom:1px solid var(--green-dark);
+  font-size:10px;
+  color:var(--green-dim);
+  flex-shrink:0;
+  letter-spacing:0.08em;
+  position:relative;
+  z-index:10;
+}
+
+#header .h-agent { color:var(--green); }
+#loop-counter { color:#003a12; font-size:10px; }
+#loop-counter.blink-loop { animation: blink 0.8s step-end infinite; color:var(--green-dim); }
+
+/* ── TERMINAL ── */
+#terminal {
+  flex:1;
+  overflow-y:auto;
+  padding:14px 20px 8px;
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  scrollbar-width:thin;
+  scrollbar-color: var(--green-dark) transparent;
+}
+#terminal::-webkit-scrollbar { width:3px; }
+#terminal::-webkit-scrollbar-thumb { background:var(--green-dark); }
+
+.line { animation: fadein 0.04s ease; }
+@keyframes fadein { from{opacity:0} to{opacity:1} }
+
+.l-sys   { color:var(--green-dim); font-size:11px; }
+.l-resp  { color:var(--green); }
+.l-cmd   { color:var(--green); }
+.l-cmd::before { content:'Marven@MERIDIAN:~$ '; color:var(--green-dim); }
+.l-warn  { color:var(--amber); }
+.l-err   { color:var(--red); }
+.l-corrupt { color:var(--corrupt); font-family:'VT323',monospace; font-size:17px; letter-spacing:0.04em; }
+.l-blank { height:6px; }
+.l-sep   { color:var(--green-dark); font-size:11px; }
+.l-dim   { color:#005510; font-size:11px; }
+.l-anna  { color:var(--white); font-size:13px; letter-spacing:0.05em; }
+.l-final { color:var(--white); font-size:12px; letter-spacing:0.12em; }
+
+.hl { background:var(--green-dark); color:var(--green); padding:0 2px; }
+.redacted { background:var(--green-dim); color:var(--green-dim); padding:0 1px; user-select:none; }
+
+/* ── COMMANDES CLIQUABLES ── */
+#commands-bar {
+  border-top:1px solid var(--green-dark);
+  padding:8px 20px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  flex-shrink:0;
+  min-height:42px;
+  align-items:center;
+}
+
+.cmd-btn {
+  background:transparent;
+  border:1px solid var(--green-dark);
+  color:var(--green-dim);
+  font-family:'Share Tech Mono', monospace;
+  font-size:11px;
+  letter-spacing:0.1em;
+  padding:4px 10px;
+  cursor:none;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.cmd-btn:hover {
+  border-color:var(--green-dim);
+  color:var(--green);
+  background:var(--green-faint);
+}
+.cmd-btn:disabled {
+  opacity:0.2;
+  pointer-events:none;
+}
+.cmd-btn.new {
+  border-color: var(--amber);
+  color: var(--amber);
+  animation: pulse-new 2s ease infinite;
+}
+@keyframes pulse-new {
+  0%,100%{opacity:1} 50%{opacity:0.5}
+}
+
+/* ── FICHIER CORROMPU ── */
+#corrupt-overlay {
+  position:fixed;
+  inset:0;
+  background:var(--bg);
+  z-index:400;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:60px;
+}
+#corrupt-overlay.active { display:flex; }
+
+#corrupt-text {
+  font-family:'Share Tech Mono', monospace;
+  font-size:14px;
+  color:var(--green-dim);
+  text-align:center;
+  line-height:2;
+  max-width:520px;
+  opacity:0;
+  transition: opacity 0.8s ease;
+}
+#corrupt-text.visible { opacity:1; }
+
+/* ── FIN ── */
+#end-overlay {
+  position:fixed;
+  inset:0;
+  background:#000;
+  z-index:500;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:60px;
+  gap:0;
+}
+#end-overlay.active { display:flex; }
+
+#end-question {
+  font-family:'Share Tech Mono', monospace;
+  font-size:15px;
+  color:var(--white);
+  text-align:center;
+  letter-spacing:0.1em;
+  opacity:0;
+  transition:opacity 1s ease;
+  margin-bottom:32px;
+}
+#end-question.visible { opacity:1; }
+
+#end-choices {
+  display:flex;
+  gap:24px;
+  opacity:0;
+  transition:opacity 0.8s ease;
+}
+#end-choices.visible { opacity:1; }
+
+.end-btn {
+  background:transparent;
+  border:1px solid #333;
+  color:#666;
+  font-family:'Share Tech Mono', monospace;
+  font-size:12px;
+  letter-spacing:0.2em;
+  padding:8px 28px;
+  cursor:none;
+  transition: border-color 0.2s, color 0.2s;
+}
+.end-btn:hover { border-color:#888; color:var(--white); }
+
+#end-message {
+  font-family:'Share Tech Mono', monospace;
+  font-size:14px;
+  color:var(--white);
+  text-align:center;
+  letter-spacing:0.08em;
+  line-height:2.2;
+  opacity:0;
+  transition:opacity 1.5s ease;
+  margin-top:40px;
+  max-width:560px;
+}
+#end-message.visible { opacity:1; }
+
+#end-final {
+  font-family:'Share Tech Mono', monospace;
+  font-size:11px;
+  color:#444;
+  text-align:center;
+  letter-spacing:0.18em;
+  line-height:2.4;
+  opacity:0;
+  transition:opacity 2s ease;
+  margin-top:48px;
+}
+#end-final.visible { opacity:1; }
+
+/* Canvas brèche */
+#breach-canvas {
+  position:fixed;
+  inset:0;
+  z-index:600;
+  display:none;
+  background:#000;
+}
+#breach-canvas.active { display:block; }
+
+/* Glitch global */
+.glitch-body { animation: glitch-frame 0.15s ease; }
+@keyframes glitch-frame {
+  0%{transform:translateX(0) skewX(0)}
+  20%{transform:translateX(-4px) skewX(-1deg)}
+  40%{transform:translateX(4px) skewX(1deg)}
+  60%{transform:translateX(-2px)}
+  80%{transform:translateX(2px)}
+  100%{transform:translateX(0) skewX(0)}
+}
+
+@keyframes flicker-slow {
+  0%,95%,100%{opacity:1}
+  96%{opacity:0.4}
+  97%{opacity:0.9}
+  98%{opacity:0.2}
+  99%{opacity:0.8}
+}
+
+@keyframes blink { 50%{opacity:0} }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+
+<!-- MENU -->
+<div id="menu">
+  <div id="menu-title">
+    <span class="m-main">MERIDIAN</span>
+    <span class="m-sub">SYSTÈME JUDICIAIRE FÉDÉRAL — v7.1.0</span>
+    <span class="m-dossier">Dossier AK-2134 — Disparition non résolue</span>
+  </div>
+  <button id="btn-play">[ Jouer ]</button>
+  <span class="menu-loop">boucle : 4 847</span>
+</div>
+
+<!-- HEADER -->
+<div id="header" style="display:none">
+  <span>MERIDIAN OS v7.1.0 — SYSTÈME JUDICIAIRE FÉDÉRAL</span>
+  <span>Agent : <span class="h-agent">Kael Marven</span> — Niveau 4</span>
+  <span id="loop-counter">boucle : 4 847</span>
+</div>
+
+<!-- TERMINAL -->
+<div id="terminal" style="display:none"></div>
+
+<!-- BARRE DE COMMANDES -->
+<div id="commands-bar" style="display:none"></div>
+
+<!-- OVERLAY FICHIER CORROMPU -->
+<div id="corrupt-overlay">
+  <div id="corrupt-text"></div>
+</div>
+
+<!-- OVERLAY FIN -->
+<div id="end-overlay">
+  <div id="end-question"></div>
+  <div id="end-choices">
+    <button class="end-btn" id="btn-oui">[ OUI ]</button>
+    <button class="end-btn" id="btn-non">[ NON ]</button>
+    <button class="end-btn" id="btn-silence">[ ... ]</button>
+  </div>
+  <div id="end-message"></div>
+  <div id="end-final"></div>
+</div>
+
+<!-- CANVAS BRÈCHE -->
+<canvas id="breach-canvas"></canvas>
+
+<script>
+// ── CURSOR ──
+const cur = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top = e.clientY + 'px';
+});
+
+// ── STATE ──
+let act = 0;
+let busy = false;
+let corruptCount = 0;
+let mv2134Attempts = 0;
+let messagesVisited = false;
+let rapportVisited = false;
+
+// ── UTILS ──
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const T = document.getElementById('terminal');
+const CB = document.getElementById('commands-bar');
+
+function addLine(text, cls = 'l-resp', delay = 0) {
+  return new Promise(async resolve => {
+    if (delay) await sleep(delay);
+    const d = document.createElement('div');
+    d.className = 'line ' + cls;
+    d.innerHTML = text;
+    T.appendChild(d);
+    T.scrollTop = T.scrollHeight;
+    resolve();
+  });
+}
+
+function blank(delay=0) { return addLine('', 'l-blank', delay); }
+
+async function lines(arr, base=50) {
+  for (let i=0; i<arr.length; i++) {
+    const [t, c='l-resp', d=0] = arr[i];
+    await addLine(t, c, i===0 ? d : base + Math.random()*30);
+  }
+}
+
+async function glitch(ms=200) {
+  document.body.classList.add('glitch-body');
+  await sleep(ms);
+  document.body.classList.remove('glitch-body');
+}
+
+// ── COMMANDES ──
+function setCommands(cmds) {
+  CB.innerHTML = '';
+  cmds.forEach(([label, fn, isNew=false]) => {
+    const b = document.createElement('button');
+    b.className = 'cmd-btn' + (isNew ? ' new' : '');
+    b.textContent = label;
+    b.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      disableAll();
+      await addLine(label, 'l-cmd');
+      await blank();
+      await fn();
+      await blank();
+      busy = false;
+      buildCommands();
+    });
+    CB.appendChild(b);
+  });
+}
+
+function disableAll() {
+  CB.querySelectorAll('.cmd-btn').forEach(b => b.disabled = true);
+}
+
+// ── FICHIER CORROMPU ──
+const corruptFiles = [
+  `Il faisait beau ce jour-là. Je ne sais pas pourquoi<br>je m'en souviens. C'est le jour où Max est arrivé —<br>il grattait à la porte, trempé. Je l'ai laissé entrer.<br>Il s'est installé comme s'il avait toujours été là.`,
+  `Ce soir j'ai commandé à manger. Trop pour une personne.<br>Je mange toujours trop pour une personne.<br>Max a dormi sur mes genoux pendant que je finissais<br>de travailler. Journée ordinaire.<br>Les meilleures le sont.`,
+  `Il y a des matins où je me réveille et pendant<br>une fraction de seconde je ne sais plus où je suis.<br>Ça dure une seconde, pas plus.<br>Ensuite tout revient — l'appartement, Max, le travail.<br>Tout est là.<br>Tout a toujours été là.`
+];
+
+async function showCorrupt(index) {
+  const ov = document.getElementById('corrupt-overlay');
+  const tx = document.getElementById('corrupt-text');
+  await glitch(300);
+  ov.classList.add('active');
+  tx.innerHTML = corruptFiles[index];
+  await sleep(200);
+  tx.classList.add('visible');
+  await sleep(4500);
+  tx.classList.remove('visible');
+  await sleep(600);
+  ov.classList.remove('active');
+  await sleep(300);
+}
+
+// ── CONTENU COMMANDES ──
+
+async function cmdDossier() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['DOSSIER AK-2134 — DISPARITION NON RÉSOLUE', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 30);
+  await lines([
+    ['Sujet       : <span class="hl">KERVEL, Anna</span>', 'l-resp'],
+    ['Âge         : 29 ans', 'l-resp'],
+    ['Profession  : Ingénieure en neurotechnologie — MERIDIAN Corp.', 'l-resp'],
+    ['Domicile    : Apt. 7, Tour Helios, District 4, Nouvelle-Genève', 'l-resp'],
+    ['Disparition : <span id="disp-date">14 avril 2134</span>', 'l-resp'],
+    ['Statut      : Classé sans suite. Rouvert sur demande interne.', 'l-resp'],
+  ], 40);
+  await blank();
+  await addLine('Personne à prévenir : <span style="color:#005510">—</span>', 'l-resp');
+  await addLine('Dossier lié : <span style="color:#005510">MV-2134 [accès refusé]</span>', 'l-resp');
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+
+  if (act >= 3) {
+    await sleep(600);
+    await glitch(150);
+    const dateEl = document.getElementById('disp-date');
+    if (dateEl) dateEl.textContent = '17 avril 2134';
+  }
+}
+
+async function cmdProfil() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['KERVEL, Anna — Profil opérateur', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 30);
+  await lines([
+    ['Employée chez MERIDIAN Corp. depuis 4 ans.', 'l-resp'],
+    ['Spécialité : architecture des systèmes de mémoire distribuée.', 'l-resp'],
+    ['Évaluation : excellente. Aucun incident disciplinaire.', 'l-resp'],
+  ], 45);
+  await blank();
+  await addLine('Dernière présence enregistrée : 14 avril 2134, 23h12.', 'l-resp', 50);
+  await addLine('Après cette heure : aucune trace physique, aucun', 'l-resp', 45);
+  await addLine('mouvement de compte, aucune connexion réseau.', 'l-resp', 45);
+  await blank();
+  await addLine('Note interne [auteur : <span class="redacted">████████</span>] :', 'l-dim', 50);
+  await addLine('"Elle avait trouvé quelque chose. C\'est tout ce qu\'on sait."', 'l-dim', 45);
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+}
+
+async function cmdLogs() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['LOGS DE CONNEXION — KERVEL, Anna', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 30);
+
+  const baseEntries = [
+    ['[10 avril 2134, 08h44]', 'Connexion serveur niveau 4. Durée : 2h17.'],
+    ['[11 avril 2134, 09h02]', 'Tentative accès niveau 6. Refusée.'],
+    ['[12 avril 2134, 14h31]', 'Connexion serveur niveau 4. Durée : 3h44.'],
+    ['[13 avril 2134, 22h10]', 'Connexion serveur niveau 4. Durée : 1h02.'],
+    ['[14 avril 2134, 23h12]', '<span class="hl">Dernière connexion enregistrée.</span>'],
+  ];
+
+  for (const [ts, ev] of baseEntries) {
+    await addLine(`<span style="color:#005510">${ts}</span> — ${ev}`, 'l-resp', 45);
+  }
+
+  if (act >= 3) {
+    await blank();
+    await glitch(200);
+    await addLine('<span class="l-err">// données supplémentaires détectées — restauration partielle</span>', 'l-err', 60);
+    const extraEntries = [
+      ['[15 avril 2134, 03h17]', 'Connexion — opérateur : <span class="redacted">MV-2134</span>'],
+      ['[16 avril 2134, 04h02]', 'Connexion — opérateur : <span class="redacted">MV-2134</span>'],
+      ['[17 avril 2134, 11h44]', 'Connexion — opérateur : <span class="redacted">MV-2134</span>'],
+      ['...', '...'],
+      ['[DONNÉES TRONQUÉES — 847 entrées masquées]', ''],
+    ];
+    for (const [ts, ev] of extraEntries) {
+      await addLine(`<span style="color:#003a12">${ts}</span> ${ev ? '— ' + ev : ''}`, 'l-dim', 55);
+    }
+  }
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+}
+
+async function cmdTimeline() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['CHRONOLOGIE — AK-2134', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 30);
+  await lines([
+    ['2130            Embauche chez MERIDIAN Corp.', 'l-resp'],
+    ['Fév. 2134       Demande accès serveurs niveau 6. Refusée.', 'l-resp'],
+    ['Mars 2134       Deuxième demande. Refusée. Signalement interne.', 'l-resp'],
+    ['14 avril 2134   Dernière connexion. 23h12.', 'l-resp'],
+    ['15 avril 2134   Absence signalée par collègue (Lena Vasst).', 'l-resp'],
+    ['17 avril 2134   Ouverture dossier AK-2134.', 'l-resp'],
+  ], 45);
+  await blank();
+  if (act < 2) {
+    await addLine('Aujourd\'hui      Dossier rouvert. Raison : <span class="redacted">████████████</span>', 'l-resp', 50);
+  } else {
+    await addLine('Aujourd\'hui      Dossier rouvert. Raison : [DONNÉES MANQUANTES]', 'l-err', 50);
+  }
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+}
+
+async function cmdPreuves() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['ÉLÉMENTS — AK-2134', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 30);
+  const items = [
+    '[#01]  Plan de l\'appartement — Tour Helios, Apt. 7',
+    '[#02]  Relevés de connexion — derniers 30 jours',
+    '[#03]  Badge d\'accès — derniers mouvements enregistrés',
+    '[#04]  Témoignage — Lena Vasst, collègue',
+    '[#05]  Rapport d\'analyse — appartement [voir RAPPORT MÉDICAL]',
+  ];
+  for (const it of items) {
+    await addLine(it, 'l-resp', 40);
+  }
+  if (act >= 2) {
+    await addLine('[#06]  <span class="l-err">Rapport forensique complémentaire — accès restreint</span>', 'l-resp', 45);
+  }
+  if (act >= 3) {
+    await addLine('[#07]  <span class="l-err">[DONNÉES MANQUANTES]</span>', 'l-resp', 45);
+    await addLine('[#08]  <span class="l-err">[DONNÉES MANQUANTES]</span>', 'l-resp', 45);
+    await addLine('[#09]  Enregistrement audio — 00:03 — <span style="color:#005510">[ILLISIBLE]</span>', 'l-resp', 45);
+  }
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+}
+
+async function cmdRapport() {
+  rapportVisited = true;
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['RAPPORT — Analyse de la scène, Apt. 7', 'l-warn'],
+    ['Rédigé par : Dr. Lena Orvai — Unité Forensique Fédérale', 'l-sys'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 35);
+  await lines([
+    ['L\'appartement présente des signes évidents de lutte.', 'l-resp'],
+    ['Table renversée. Éclats de verre au sol, section cuisine.', 'l-resp'],
+    ['Traces d\'impact sur le mur nord — hauteur 1m40.', 'l-resp'],
+  ], 45);
+  await blank();
+  await addLine('Aucun sang retrouvé.', 'l-resp', 50);
+  await addLine('Aucun corps.', 'l-resp', 50);
+  await addLine('Aucune trace ADN autre que celle du sujet.', 'l-resp', 50);
+  await blank();
+  await addLine('Note : La disposition des éléments est cohérente avec', 'l-resp', 50);
+  await addLine('une résistance physique. Le sujet n\'est pas parti', 'l-resp', 45);
+  await addLine('volontairement.', 'l-resp', 45);
+  await blank();
+  await addLine('Conclusion officielle retenue : <span class="hl">déconnexion volontaire.</span>', 'l-resp', 55);
+  await sleep(1800);
+  await glitch(100);
+  await addLine('Conclusion officielle retenue : <span class="hl">déconnexion volontaire.</span>', 'l-dim', 30);
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+
+  if (act < 3) {
+    act = 2;
+    await sleep(800);
+    await showCorrupt(0);
+    corruptCount = 1;
+    buildCommands();
+  }
+}
+
+async function cmdMessages() {
+  messagesVisited = true;
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['MESSAGES RÉCUPÉRÉS — restauration partielle', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 35);
+  await blank();
+  await addLine('[03 avril, 09h14] — Expéditeur : <span class="redacted">████████████</span>', 'l-sys', 50);
+  await addLine('"Tu n\'aurais pas dû regarder ces fichiers.', 'l-resp', 45);
+  await addLine(' Arrête pendant qu\'il est encore temps."', 'l-resp', 40);
+  await blank();
+  await addLine('[09 avril, 02h31] — Expéditeur : <span class="redacted">████████████</span>', 'l-sys', 50);
+  await addLine('"On sait que tu <span class="redacted">█████████████████████████████</span>', 'l-resp', 45);
+  await addLine(' <span class="redacted">████████████████</span>. La prochaine fois ce ne sera', 'l-resp', 40);
+  await addLine(' pas un avertissement."', 'l-resp', 40);
+  await blank();
+  await addLine('[13 avril, 23h58] — Expéditeur : <span class="redacted">████████████</span>', 'l-sys', 50);
+  await addLine('"Anna."', 'l-resp', 45);
+  await blank();
+  await addLine('[13 avril, 23h59] — Expéditeur : <span class="redacted">████████████</span>', 'l-sys', 50);
+
+  const blocLine = document.createElement('div');
+  blocLine.className = 'line l-resp';
+  blocLine.innerHTML = '"<span class="redacted" id="msg-bloc">████</span>"';
+  T.appendChild(blocLine);
+  T.scrollTop = T.scrollHeight;
+
+  await sleep(10000);
+  const bloc = document.getElementById('msg-bloc');
+  if (bloc) {
+    const mot = 'Cours.';
+    let i = 0;
+    const iv = setInterval(() => {
+      if (i <= mot.length) {
+        bloc.outerHTML = `"<span style="color:var(--red)">${mot.substring(0, i)}<span class="redacted">${'█'.repeat(Math.max(0, 4-i))}</span></span>"`;
+        i++;
+      } else clearInterval(iv);
+    }, 300);
+  }
+
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+
+  if (act < 3) {
+    act = 3;
+    await sleep(1200);
+    await showCorrupt(1);
+    corruptCount = 2;
+    buildCommands();
+  }
+}
+
+async function cmdEnregistrement() {
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['ENREGISTREMENT AK-2134/09', 'l-warn'],
+    ['Format : [NON RECONNU] — Durée : 00:03', 'l-sys'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 35);
+  await blank();
+  await addLine('Transcription automatique — qualité : 4%', 'l-sys', 50);
+  await blank();
+  await addLine('"...tu ne comprends pas ce qu\'ils font avec—"', 'l-resp', 60);
+  await addLine('<span style="color:#003a12">[SIGNAL PERDU]</span>', 'l-dim', 80);
+  await addLine('"...les consciences, ils prennent les—"', 'l-resp', 60);
+  await addLine('<span style="color:#003a12">[SIGNAL PERDU]</span>', 'l-dim', 80);
+  await addLine('"...s\'il te plaît, trouve-"', 'l-resp', 60);
+  await addLine('<span style="color:#003a12">[FIN DU FICHIER]</span>', 'l-dim', 80);
+  await blank();
+  await sleep(1500);
+  await glitch(200);
+  await addLine('lecture impossible — format non reconnu', 'l-sys', 40);
+  await sleep(1800);
+  await addLine('— ou peut-être que si.', 'l-dim', 40);
+  await sleep(2000);
+  const lastLines = T.querySelectorAll('.line');
+  if (lastLines.length > 0) lastLines[lastLines.length-1].remove();
+
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+
+  if (act < 4) {
+    act = 4;
+    await sleep(800);
+    await showCorrupt(2);
+    corruptCount = 3;
+    buildCommands();
+    setTimeout(startAct4Questions, 3000);
+  }
+}
+
+async function cmdMV2134() {
+  mv2134Attempts++;
+  if (act < 4) {
+    await glitch(100);
+    await addLine('Accès refusé — niveau insuffisant.', 'l-err', 40);
+    return;
+  }
+  await addLine('Accès en cours...', 'l-sys', 40);
+  await sleep(800);
+  await glitch(300);
+  await addLine('Fichier corrompu. Restauration partielle.', 'l-sys', 40);
+  await blank();
+  await lines([
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+    ['DOSSIER MV-2134 — DISPARITION NON RÉSOLUE', 'l-warn'],
+    ['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep'],
+  ], 35);
+  await lines([
+    ['Sujet       : <span class="hl">MARVEN, Kael</span>', 'l-resp'],
+    ['Âge         : 31 ans', 'l-resp'],
+    ['Profession  : [DONNÉES MANQUANTES]', 'l-err'],
+    ['Disparition : [DONNÉES MANQUANTES]', 'l-err'],
+    ['Statut      : Classé sans suite.', 'l-resp'],
+  ], 45);
+  await blank();
+  await addLine('Personne à prévenir : [DONNÉES CORROMPUES]', 'l-err', 50);
+  await addLine('Dossier lié         : [DONNÉES CORROMPUES]', 'l-err', 50);
+  await blank();
+  await addLine('Note :', 'l-sys', 50);
+  await addLine('<span class="redacted">████████████████████████████████████████████████</span>', 'l-resp', 40);
+  await addLine('<span class="redacted">████████████████████████████████████████████████</span>', 'l-resp', 40);
+  await addLine('<span class="redacted">████████████████████████████████████████████████</span>', 'l-resp', 40);
+  await lines([['<span class="l-sep">─────────────────────────────────────────────────</span>', 'l-sep']], 30);
+
+  await sleep(1500);
+  await glitch(400);
+  await blank();
+  await addLine('...', 'l-dim', 80);
+  await sleep(1200);
+  await startEnding();
+}
+
+// ── ACT 4 QUESTIONS ──
+async function startAct4Questions() {
+  const questions = [
+    ['chargement fichier 447-B... [depuis combien de temps travaillez-vous seul ?]... fichier introuvable.', 'l-dim'],
+    ['accès refusé niveau 7... [vous souvenez-vous de la dernière fois que vous avez été heureux ?]... tentative enregistrée.', 'l-dim'],
+    ['reconstruction données... [est-ce que ce prénom vous dit quelque chose ?]... restauration partielle.', 'l-dim'],
+  ];
+  for (const [t, c] of questions) {
+    await sleep(8000 + Math.random() * 5000);
+    if (act >= 4) {
+      await glitch(100);
+      await addLine(t, c);
+      T.scrollTop = T.scrollHeight;
+    }
+  }
+}
+
+// ── BUILD COMMANDS ──
+function buildCommands() {
+  const cmds = [];
+
+  cmds.push(['DOSSIER', cmdDossier]);
+  cmds.push(['PROFIL', cmdProfil]);
+  cmds.push(['LOGS', cmdLogs]);
+  cmds.push(['TIMELINE', cmdTimeline]);
+  cmds.push(['PREUVES', cmdPreuves]);
+
+  if (act >= 2) cmds.push(['RAPPORT MÉDICAL', cmdRapport, !rapportVisited]);
+  if (act >= 3) {
+    cmds.push(['MESSAGES', cmdMessages, !messagesVisited]);
+    cmds.push(['ENREGISTREMENT #09', cmdEnregistrement]);
+  }
+  if (act >= 1) cmds.push(['DOSSIER LIÉ : MV-2134', cmdMV2134]);
+
+  setCommands(cmds);
+}
+
+// ── DÉMARRAGE ──
+async function startGame() {
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('header').style.display = 'flex';
+  document.getElementById('terminal').style.display = 'flex';
+  document.getElementById('commands-bar').style.display = 'flex';
+
+  await lines([
+    ['MERIDIAN OS v7.1.0 — SYSTÈME JUDICIAIRE FÉDÉRAL', 'l-sys'],
+    ['ACCÈS OPÉRATEUR — NIVEAU 4', 'l-sys'],
+    ['SESSION INITIALISÉE', 'l-sys'],
+  ], 60);
+  await blank();
+  await addLine('Bienvenue, <span class="hl">Agent Marven</span>.', 'l-resp', 70);
+  await addLine('Dossier assigné : <span class="hl">AK-2134</span> — DISPARITION NON RÉSOLUE', 'l-resp', 60);
+  await addLine('Sujet : KERVEL, Anna — 29 ans — Ingénieure en neurotechnologie', 'l-resp', 60);
+  await addLine('Statut : Classé sans suite. Rouvert sur demande interne.', 'l-resp', 60);
+  await blank();
+  await addLine('Sélectionnez une commande pour commencer.', 'l-sys', 60);
+  await blank();
+
+  act = 1;
+  buildCommands();
+}
+
+// ── FIN ──
+async function startEnding() {
+  busy = true;
+  disableAll();
+
+  await sleep(2000);
+  await glitch(500);
+
+  // Terminal freeze
+  const loopEl = document.getElementById('loop-counter');
+  loopEl.classList.add('blink-loop');
+
+  await sleep(3000);
+
+  const endOv = document.getElementById('end-overlay');
+  const endQ = document.getElementById('end-question');
+  const endChoices = document.getElementById('end-choices');
+  const endMsg = document.getElementById('end-message');
+  const endFinal = document.getElementById('end-final');
+
+  endOv.classList.add('active');
+  await sleep(800);
+  endQ.textContent = 'Tu te souviens de moi ?';
+  endQ.classList.add('visible');
+  await sleep(1000);
+  endChoices.classList.add('visible');
+
+  function handleAnswer() {
+    endChoices.classList.remove('visible');
+    endChoices.style.display = 'none';
+    showAnnaResponse();
+  }
+
+  document.getElementById('btn-oui').addEventListener('click', handleAnswer, {once:true});
+  document.getElementById('btn-non').addEventListener('click', handleAnswer, {once:true});
+  document.getElementById('btn-silence').addEventListener('click', handleAnswer, {once:true});
+
+  // Silence auto après 30s
+  setTimeout(() => {
+    if (endChoices.style.display !== 'none') handleAnswer();
+  }, 30000);
+}
+
+async function showAnnaResponse() {
+  const endMsg = document.getElementById('end-message');
+  const endFinal = document.getElementById('end-final');
+
+  await sleep(2000);
+
+  endMsg.innerHTML = 'Je rêvais en boucle de ce jour où tu viendrais<br>me libérer..';
+  endMsg.classList.add('visible');
+
+  await sleep(5000);
+
+  // Deuxième partie
+  endMsg.innerHTML += '<br><br>..mon amour.';
+
+  await sleep(4000);
+
+  // Message final
+  endFinal.innerHTML =
+    'KAEL MARVEN &nbsp;—&nbsp; disparu depuis 22 ans.<br>' +
+    'ANNA MARVEN &nbsp;—&nbsp; disparu depuis 23 ans.<br><br>' +
+    'Premières consciences à se libérer du système MERIDIAN.';
+  endFinal.classList.add('visible');
+
+  await sleep(5000);
+
+  // Brèche
+  await startBreach();
+}
+
+// ── BRÈCHE ──
+async function startBreach() {
+  const canvas = document.getElementById('breach-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  canvas.classList.add('active');
+
+  // Glitch d'abord
+  for (let i = 0; i < 8; i++) {
+    await glitch(80 + Math.random() * 120);
+    await sleep(60 + Math.random() * 80);
+  }
+
+  // Particules — deux âmes
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+
+  const souls = [
+    { x: cx - 60, y: cy, vx: -0.4, vy: -0.2, particles: [], hue: 180, name: 'kael' },
+    { x: cx + 60, y: cy, vx: 0.4, vy: -0.2, particles: [], hue: 120, name: 'anna' },
+  ];
+
+  // Crée les particules initiales
+  souls.forEach(s => {
+    for (let i = 0; i < 120; i++) {
+      s.particles.push({
+        x: s.x + (Math.random()-0.5)*30,
+        y: s.y + (Math.random()-0.5)*30,
+        vx: (Math.random()-0.5)*0.8,
+        vy: (Math.random()-0.5)*0.8,
+        life: 1,
+        size: Math.random()*3+1,
+      });
+    }
+  });
+
+  let frame = 0;
+  const maxFrames = 300;
+
+  function draw() {
+    if (frame > maxFrames) {
+      // Noir total
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillRect(0, 0, W, H);
+
+    const progress = frame / maxFrames;
+
+    souls.forEach(s => {
+      // Déplace le centre
+      s.x += s.vx * (1 + progress * 2);
+      s.y += s.vy * (1 + progress * 1.5);
+
+      s.particles.forEach(p => {
+        p.x += p.vx + (p.x - s.x) * 0.001 * progress;
+        p.y += p.vy + (p.y - s.y) * 0.001 * progress;
+        p.vx += (s.x - p.x) * 0.003;
+        p.vy += (s.y - p.y) * 0.003;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.life -= 0.003 * progress;
+        if (p.life < 0) p.life = 0;
+
+        // Vers la rencontre au centre puis dissolution
+        const alpha = p.life * (1 - progress * 0.7);
+        const sz = p.size * (1 - progress * 0.5);
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(0.1, sz), 0, Math.PI*2);
+        ctx.fillStyle = `hsla(${s.hue}, 80%, 70%, ${alpha})`;
+        ctx.fill();
+      });
+
+      // Lueur centrale
+      const grd = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 40 * (1-progress*0.5));
+      grd.addColorStop(0, `hsla(${s.hue}, 80%, 90%, ${0.15 * (1-progress)})`);
+      grd.addColorStop(1, 'transparent');
+      ctx.fillStyle = grd;
+      ctx.fillRect(s.x-50, s.y-50, 100, 100);
+    });
+
+    // Rapprochement final
+    if (progress > 0.6) {
+      const merge = (progress - 0.6) / 0.4;
+      const mx = (souls[0].x + souls[1].x) / 2;
+      const my = (souls[0].y + souls[1].y) / 2;
+      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, 80 * merge);
+      grd.addColorStop(0, `hsla(150, 60%, 95%, ${merge * 0.3})`);
+      grd.addColorStop(1, 'transparent');
+      ctx.fillStyle = grd;
+      ctx.fillRect(mx-100, my-100, 200, 200);
+    }
+
+    frame++;
+    requestAnimationFrame(draw);
+  }
+
+  requestAnimationFrame(draw);
+
+  // Fade to black final
+  await sleep((maxFrames / 60) * 1000 + 1000);
+  canvas.style.transition = 'opacity 3s ease';
+  canvas.style.opacity = '0';
+}
+
+// ── EVENTS ──
+document.getElementById('btn-play').addEventListener('click', startGame);
+
+document.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top = e.clientY + 'px';
+});
+</script>
+</body>
+</html>
