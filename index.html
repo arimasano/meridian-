@@ -381,9 +381,21 @@ function addLine(text, cls='l-resp', delay=0) {
     if (delay) await sleep(delay);
     const d = document.createElement('div');
     d.className = 'line ' + cls;
+    // Typage caractère par caractère avec son
+    const plain = text.replace(/<[^>]*>/g, ''); // texte brut pour compter les chars
     d.innerHTML = text;
+    d.style.opacity = '0';
     T.appendChild(d);
     T.scrollTop = T.scrollHeight;
+    d.style.opacity = '1';
+    // Son de frappe : 1 clic par ~3 caractères, espacé
+    const charCount = plain.length;
+    const clickCount = Math.ceil(charCount / 3);
+    const interval = Math.min(60, Math.max(18, (charCount * 12) / clickCount));
+    for (let i = 0; i < clickCount; i++) {
+      playKeyClick();
+      await sleep(interval + Math.random() * 15);
+    }
     resolve();
   });
 }
@@ -875,8 +887,6 @@ async function startGame() {
 // ══ AUDIO ══
 let audioCtx = null;
 let masterGain = null;
-let droneGain  = null;
-let rainGain   = null;
 
 function initAudio() {
   if (audioCtx) return;
@@ -884,70 +894,30 @@ function initAudio() {
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 1;
   masterGain.connect(audioCtx.destination);
-
-  const sr = audioCtx.sampleRate;
-
-  // ── Drone électronique très bas ──
-  const droneOsc = audioCtx.createOscillator();
-  droneOsc.type = 'sine';
-  droneOsc.frequency.value = 38;
-  const droneOsc2 = audioCtx.createOscillator();
-  droneOsc2.type = 'sine';
-  droneOsc2.frequency.value = 41.5; // léger battement
-  droneGain = audioCtx.createGain();
-  droneGain.gain.value = 0;
-  droneOsc.connect(droneGain);
-  droneOsc2.connect(droneGain);
-  droneGain.connect(masterGain);
-  droneOsc.start(); droneOsc2.start();
-  droneGain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 4);
-
-  // ── Pluie légère ──
-  const rainBuf = audioCtx.createBuffer(1, sr * 3, sr);
-  const rainData = rainBuf.getChannelData(0);
-  for (let i = 0; i < rainData.length; i++) rainData[i] = (Math.random() * 2 - 1);
-  const rainSrc = audioCtx.createBufferSource();
-  rainSrc.buffer = rainBuf; rainSrc.loop = true;
-  const rainHp = audioCtx.createBiquadFilter();
-  rainHp.type = 'highpass'; rainHp.frequency.value = 4000;
-  const rainLp = audioCtx.createBiquadFilter();
-  rainLp.type = 'lowpass'; rainLp.frequency.value = 10000;
-  rainGain = audioCtx.createGain();
-  rainGain.gain.value = 0;
-  rainSrc.connect(rainHp); rainHp.connect(rainLp); rainLp.connect(rainGain);
-  rainGain.connect(masterGain);
-  rainSrc.start();
-  rainGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 5);
 }
 
 function playKeyClick() {
   if (!audioCtx) return;
-  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.035, audioCtx.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.3));
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  const g = audioCtx.createGain(); g.gain.value = 0.04;
-  const f = audioCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3500;
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.25));
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = 0.03;
+  const f = audioCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200 + Math.random() * 600;
   src.connect(f); f.connect(g); g.connect(masterGain);
   src.start();
 }
 
 function playGlitchSound() {
   if (!audioCtx) return;
-  // Bruit court descendant — électronique, pas robotique
-  const dur = 0.06 + Math.random() * 0.07;
+  const dur = 0.055 + Math.random() * 0.065;
   const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) {
-    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
-  }
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
   const src = audioCtx.createBufferSource(); src.buffer = buf;
-  const g = audioCtx.createGain(); g.gain.value = 0.06;
-  const f = audioCtx.createBiquadFilter();
-  f.type = 'bandpass';
-  f.frequency.value = 600 + Math.random() * 1200;
-  f.Q.value = 0.8;
+  const g = audioCtx.createGain(); g.gain.value = 0.055;
+  const f = audioCtx.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.value = 500 + Math.random() * 1400; f.Q.value = 0.7;
   src.connect(f); f.connect(g); g.connect(masterGain);
   src.start();
 }
@@ -956,20 +926,11 @@ function fadeOutAudio(seconds) {
   if (!masterGain || !audioCtx) return;
   masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + seconds);
 }
-
-function fadeOutRain(seconds) {
-  if (!rainGain || !audioCtx) return;
-  rainGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + seconds);
-}
-
-function fadeInRain() {
-  if (!rainGain || !audioCtx) return;
-  rainGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 2);
-}
+function fadeOutRain() {}   // stubs vides — plus utilisés
+function fadeInRain()  {}
 
 async function playShutdown() {
   if (!audioCtx) return;
-  // Son de machine qui s'éteint : pitch descendant
   const osc = audioCtx.createOscillator();
   osc.type = 'sawtooth';
   osc.frequency.setValueAtTime(120, audioCtx.currentTime);
@@ -978,6 +939,9 @@ async function playShutdown() {
   g.gain.setValueAtTime(0.07, audioCtx.currentTime);
   g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 5);
   const f = audioCtx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300;
+  osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 5.5);
+}
   osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
   osc.start(); osc.stop(audioCtx.currentTime + 5.5);
 }
@@ -1238,26 +1202,27 @@ async function startBreach() {
         // "fin du cauchemar" d'abord
         const fadeIn = Math.min(finalTextTimer * 2, 1);
         ctx.globalAlpha = fadeIn;
-        ctx.fillStyle = '#2a2a2a';
-        ctx.font = '14px Share Tech Mono, monospace';
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '15px Share Tech Mono, monospace';
         ctx.textAlign = 'center';
         ctx.fillText('— fin du cauchemar —', cx, cy);
 
         // Puis Kael/Anna en dessous après un délai
         if (finalTextTimer > 1.5) {
           const infoFade = Math.min((finalTextTimer - 1.5) * 1.5, 1);
-          ctx.globalAlpha = infoFade * 0.7;
-          ctx.fillStyle = '#333';
-          ctx.font = '12px Share Tech Mono, monospace';
-          ctx.fillText('KAEL MARVEN  —  disparu depuis 22 ans.', cx, cy + 50);
-          ctx.fillText('ANNA MARVEN  —  disparu depuis 23 ans.', cx, cy + 74);
-          ctx.globalAlpha = infoFade * 0.4;
-          ctx.font = '10px Share Tech Mono, monospace';
-          ctx.fillText('Premières consciences à se libérer du système MERIDIAN.', cx, cy + 106);
+          ctx.globalAlpha = infoFade;
+          ctx.fillStyle = '#cccccc';
+          ctx.font = '13px Share Tech Mono, monospace';
+          ctx.fillText('KAEL MARVEN  —  disparu depuis 22 ans.', cx, cy + 54);
+          ctx.fillText('ANNA MARVEN  —  disparu depuis 23 ans.', cx, cy + 78);
+          ctx.globalAlpha = infoFade * 0.65;
+          ctx.fillStyle = '#888888';
+          ctx.font = '11px Share Tech Mono, monospace';
+          ctx.fillText('Premières consciences à se libérer du système MERIDIAN.', cx, cy + 112);
         }
 
         ctx.globalAlpha = 1;
-        if (finalTextTimer > 4) return; // fin totale
+        if (finalTextTimer > 5) return;
       }
     }
 
