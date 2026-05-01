@@ -25,7 +25,7 @@ body {
   background: var(--bg);
   color: var(--green);
   font-family: 'Share Tech Mono', monospace;
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.7;
   height: 100vh;
   overflow: hidden;
@@ -141,9 +141,9 @@ body::after {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:5px 16px;
+  padding:6px 16px;
   border-bottom:1px solid var(--green-dark);
-  font-size:10px;
+  font-size:13px;
   color:var(--green-dim);
   flex-shrink:0;
   letter-spacing:0.08em;
@@ -152,7 +152,7 @@ body::after {
 }
 
 #header .h-agent { color:var(--green); }
-#loop-counter { color:#003a12; font-size:10px; }
+#loop-counter { color:var(--green-dim); font-size:13px; }
 #loop-counter.blink-loop { animation: blink 0.8s step-end infinite; color:var(--green-dim); }
 
 /* ── TERMINAL ── */
@@ -172,18 +172,18 @@ body::after {
 .line { animation: fadein 0.04s ease; }
 @keyframes fadein { from{opacity:0} to{opacity:1} }
 
-.l-sys   { color:var(--green-dim); font-size:11px; }
+.l-sys   { color:var(--green-dim); font-size:15px; }
 .l-resp  { color:var(--green); }
 .l-cmd   { color:var(--green); }
 .l-cmd::before { content:'Marven@MERIDIAN:~$ '; color:var(--green-dim); }
 .l-warn  { color:var(--amber); }
 .l-err   { color:var(--red); }
-.l-corrupt { color:var(--corrupt); font-family:'VT323',monospace; font-size:17px; letter-spacing:0.04em; }
+.l-corrupt { color:var(--corrupt); font-family:'VT323',monospace; font-size:22px; letter-spacing:0.04em; }
 .l-blank { height:6px; }
-.l-sep   { color:var(--green-dark); font-size:11px; }
-.l-dim   { color:#005510; font-size:11px; }
-.l-anna  { color:var(--white); font-size:13px; letter-spacing:0.05em; }
-.l-final { color:var(--white); font-size:12px; letter-spacing:0.12em; }
+.l-sep   { color:var(--green-dark); font-size:15px; }
+.l-dim   { color:#005510; font-size:15px; }
+.l-anna  { color:var(--white); font-size:17px; letter-spacing:0.05em; }
+.l-final { color:var(--white); font-size:16px; letter-spacing:0.12em; }
 
 .hl { background:var(--green-dark); color:var(--green); padding:0 2px; }
 .redacted { background:var(--green-dim); color:var(--green-dim); padding:0 1px; user-select:none; }
@@ -205,9 +205,9 @@ body::after {
   border:1px solid var(--green-dark);
   color:var(--green-dim);
   font-family:'Share Tech Mono', monospace;
-  font-size:11px;
+  font-size:14px;
   letter-spacing:0.1em;
-  padding:4px 10px;
+  padding:5px 12px;
   cursor:none;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
@@ -245,11 +245,11 @@ body::after {
 
 #corrupt-text {
   font-family:'Share Tech Mono', monospace;
-  font-size:14px;
+  font-size:18px;
   color:var(--green-dim);
   text-align:center;
   line-height:2;
-  max-width:520px;
+  max-width:580px;
   opacity:0;
   transition: opacity 0.8s ease;
 }
@@ -272,7 +272,7 @@ body::after {
 
 #end-question {
   font-family:'Share Tech Mono', monospace;
-  font-size:15px;
+  font-size:22px;
   color:var(--white);
   text-align:center;
   letter-spacing:0.1em;
@@ -295,9 +295,9 @@ body::after {
   border:1px solid #333;
   color:#666;
   font-family:'Share Tech Mono', monospace;
-  font-size:12px;
+  font-size:16px;
   letter-spacing:0.2em;
-  padding:8px 28px;
+  padding:10px 32px;
   cursor:none;
   transition: border-color 0.2s, color 0.2s;
 }
@@ -305,7 +305,7 @@ body::after {
 
 #end-message {
   font-family:'Share Tech Mono', monospace;
-  font-size:14px;
+  font-size:19px;
   color:var(--white);
   text-align:center;
   letter-spacing:0.08em;
@@ -313,13 +313,13 @@ body::after {
   opacity:0;
   transition:opacity 1.5s ease;
   margin-top:40px;
-  max-width:560px;
+  max-width:600px;
 }
 #end-message.visible { opacity:1; }
 
 #end-final {
   font-family:'Share Tech Mono', monospace;
-  font-size:11px;
+  font-size:15px;
   color:#444;
   text-align:center;
   letter-spacing:0.18em;
