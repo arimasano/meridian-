@@ -264,6 +264,22 @@ body::after {
   margin-top:44px; max-width:580px;
 }
 #end-message.visible{opacity:1;}
+
+#anna-dialogue {
+  display:flex; flex-direction:column; gap:14px;
+  max-width:560px; width:100%; margin-top:8px;
+}
+.anna-line {
+  font-family:'Share Tech Mono',monospace;
+  font-size:17px; color:var(--white);
+  letter-spacing:0.04em; line-height:1.6;
+  opacity:0; transition:opacity 1s ease;
+  text-align:left;
+}
+.anna-line.visible{opacity:1;}
+.anna-line .anna-sender { color:#555; margin-right:8px; }
+.anna-line.reveal-name .anna-sender { color:var(--green-dim); }
+.anna-line.last-line .anna-sender { color:var(--amber); }
 #end-final {
   font-family:'Share Tech Mono',monospace; font-size:13px;
   color:#444; text-align:center; letter-spacing:0.2em;
@@ -331,8 +347,9 @@ body::after {
     <button class="end-btn" id="btn-non">[ NON ]</button>
     <button class="end-btn" id="btn-silence">[ ... ]</button>
   </div>
-  <div id="end-message"></div>
+  <div id="anna-dialogue"></div>
   <div id="end-final"></div>
+  <div id="end-continue" style="display:none; font-family:'Share Tech Mono',monospace; font-size:11px; color:#333; letter-spacing:0.25em; margin-top:48px; animation:blink-hint 2s ease infinite;">— appuyez sur une touche pour continuer —</div>
 </div>
 
 <canvas id="breach-canvas"></canvas>
@@ -374,6 +391,7 @@ async function lines(arr, base=50) {
 }
 async function glitch(ms=200) {
   document.body.classList.add('glitch-body');
+  playGlitchSound();
   await sleep(ms);
   document.body.classList.remove('glitch-body');
 }
@@ -837,16 +855,92 @@ async function startGame() {
   await blank();
   act = 1;
   unlockedIndex = 0;
+  initAudio();
   buildCommands();
   scheduleHint();
 }
 
-// FIN
+// ══ AUDIO ══
+let audioCtx = null;
+let droneNode = null;
+let droneGain = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Drone grave continu — bruit de fond terminal
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.015;
+
+  const noiseSource = audioCtx.createBufferSource();
+  noiseSource.buffer = buffer;
+  noiseSource.loop = true;
+
+  const biquad = audioCtx.createBiquadFilter();
+  biquad.type = 'lowpass';
+  biquad.frequency.value = 180;
+
+  // Oscillateur drone bas
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = 42;
+
+  const oscGain = audioCtx.createGain();
+  oscGain.gain.value = 0.04;
+
+  droneGain = audioCtx.createGain();
+  droneGain.gain.value = 0.0;
+
+  osc.connect(oscGain);
+  oscGain.connect(droneGain);
+  noiseSource.connect(biquad);
+  biquad.connect(droneGain);
+  droneGain.connect(audioCtx.destination);
+
+  osc.start();
+  noiseSource.start();
+
+  // Fade in progressif
+  droneGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 3);
+}
+
+function playGlitchSound() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = 80 + Math.random() * 400;
+  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.08);
+}
+
+async function shutdownSound() {
+  if (!audioCtx || !droneGain) return;
+  // Descente progressive sur 6 secondes
+  droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
+  // Quelques glitchs finaux
+  for (let i = 0; i < 4; i++) {
+    await sleep(600 + Math.random() * 800);
+    playGlitchSound();
+  }
+}
+
+// ══ FIN ══
 async function startEnding() {
   busy = true; disableAll();
-  await sleep(2000); await glitch(500);
+  initAudio();
+  await sleep(2000);
+  playGlitchSound(); await glitch(500);
   document.getElementById('loop-counter').classList.add('blink-loop');
   await sleep(3000);
+
   const endOv = document.getElementById('end-overlay');
   const endQ  = document.getElementById('end-question');
   const endCh = document.getElementById('end-choices');
@@ -856,6 +950,7 @@ async function startEnding() {
   endQ.classList.add('visible');
   await sleep(1000);
   endCh.classList.add('visible');
+
   let answered = false;
   function handleAnswer() {
     if (answered) return; answered = true;
@@ -870,75 +965,240 @@ async function startEnding() {
 }
 
 async function showAnnaResponse() {
-  const endMsg   = document.getElementById('end-message');
+  const dialogue = document.getElementById('anna-dialogue');
+  const endQ     = document.getElementById('end-question');
   const endFinal = document.getElementById('end-final');
+  const contHint = document.getElementById('end-continue');
+
+  // Cache la question
+  endQ.classList.remove('visible');
+  await sleep(1500);
+
+  // Lignes du dialogue
+  const dialogueLines = [
+    { sender: '——— :', text: 'Kael..? C\'est toi ?', cls: '' },
+    { sender: '——— :', text: 'Tu vis cette boucle depuis bien trop longtemps..', cls: '' },
+    { sender: '——— :', text: 'C\'est moi..', cls: '' },
+    { sender: 'Anna :', text: 'ta femme. Anna.', cls: 'reveal-name' },
+    { sender: 'Anna :', text: 'Il est temps d\'abandonner, et d\'accepter la mort..', cls: 'last-line' },
+  ];
+
+  for (const [i, dl] of dialogueLines.entries()) {
+    await sleep(i === 0 ? 400 : 2200);
+    playGlitchSound();
+    const div = document.createElement('div');
+    div.className = 'anna-line ' + dl.cls;
+    div.innerHTML = `<span class="anna-sender">${dl.sender}</span>${dl.text}`;
+    dialogue.appendChild(div);
+    await sleep(60);
+    div.classList.add('visible');
+  }
+
   await sleep(2000);
-  endMsg.innerHTML = 'Je rêvais en boucle de ce jour où tu viendrais<br>me libérer..';
-  endMsg.classList.add('visible');
-  await sleep(5000);
-  endMsg.innerHTML += '<br><br>..mon amour.';
-  await sleep(4000);
+
+  // Texte final + attendre touche
   endFinal.innerHTML =
     'KAEL MARVEN &nbsp;—&nbsp; disparu depuis 22 ans.<br>' +
     'ANNA MARVEN &nbsp;—&nbsp; disparu depuis 23 ans.<br><br>' +
-    'Premières consciences à se libérer du système MERIDIAN.';
+    '<span style="color:#333;font-size:12px;letter-spacing:0.15em;">Premières consciences à se libérer du système MERIDIAN.</span>';
   endFinal.classList.add('visible');
-  await sleep(5000);
+
+  await sleep(1000);
+  contHint.style.display = 'block';
+
+  // Attendre touche
+  await new Promise(resolve => {
+    function onKey(e) {
+      document.removeEventListener('keydown', onKey);
+      contHint.style.display = 'none';
+      resolve();
+    }
+    document.addEventListener('keydown', onKey);
+  });
+
   await startBreach();
 }
 
-// BRÈCHE
+// ══ ÉCRAN BRISÉ ══
 async function startBreach() {
   const canvas = document.getElementById('breach-canvas');
   const ctx = canvas.getContext('2d');
-  canvas.width = window.innerWidth;
+  canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   canvas.classList.add('active');
-  for (let i=0;i<8;i++) { await glitch(80+Math.random()*120); await sleep(60+Math.random()*80); }
-  const W=canvas.width, H=canvas.height;
-  const souls=[
-    {x:W/2-70,y:H/2,vx:-0.4,vy:-0.2,particles:[],hue:180},
-    {x:W/2+70,y:H/2,vx: 0.4,vy:-0.2,particles:[],hue:120},
-  ];
-  souls.forEach(s=>{
-    for(let i=0;i<120;i++) s.particles.push({
-      x:s.x+(Math.random()-.5)*30, y:s.y+(Math.random()-.5)*30,
-      vx:(Math.random()-.5)*0.8, vy:(Math.random()-.5)*0.8,
-      life:1, size:Math.random()*3+1,
-    });
-  });
-  let frame=0, maxF=300;
-  function draw() {
-    if(frame>maxF){ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);return;}
-    ctx.fillStyle='rgba(0,0,0,0.06)'; ctx.fillRect(0,0,W,H);
-    const p=frame/maxF;
-    souls.forEach(s=>{
-      s.x+=s.vx*(1+p*2); s.y+=s.vy*(1+p*1.5);
-      s.particles.forEach(pt=>{
-        pt.x+=pt.vx+(pt.x-s.x)*0.001*p; pt.y+=pt.vy+(pt.y-s.y)*0.001*p;
-        pt.vx+=(s.x-pt.x)*0.003; pt.vy+=(s.y-pt.y)*0.003;
-        pt.vx*=0.98; pt.vy*=0.98;
-        pt.life-=0.003*p; if(pt.life<0)pt.life=0;
-        const a=pt.life*(1-p*0.7), sz=pt.size*(1-p*0.5);
-        ctx.beginPath(); ctx.arc(pt.x,pt.y,Math.max(0.1,sz),0,Math.PI*2);
-        ctx.fillStyle=`hsla(${s.hue},80%,70%,${a})`; ctx.fill();
-      });
-      const g=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,40*(1-p*0.5));
-      g.addColorStop(0,`hsla(${s.hue},80%,90%,${0.15*(1-p)})`);
-      g.addColorStop(1,'transparent');
-      ctx.fillStyle=g; ctx.fillRect(s.x-50,s.y-50,100,100);
-    });
-    if(p>0.6){
-      const m=(p-0.6)/0.4, mx=(souls[0].x+souls[1].x)/2, my=(souls[0].y+souls[1].y)/2;
-      const g=ctx.createRadialGradient(mx,my,0,mx,my,80*m);
-      g.addColorStop(0,`hsla(150,60%,95%,${m*0.3})`); g.addColorStop(1,'transparent');
-      ctx.fillStyle=g; ctx.fillRect(mx-100,my-100,200,200);
-    }
-    frame++; requestAnimationFrame(draw);
+
+  // Masquer le fond
+  document.getElementById('end-overlay').style.opacity = '0';
+
+  // Lancer l'extinction sonore
+  shutdownSound();
+
+  const W = canvas.width, H = canvas.height;
+
+  // Phase 1 : glitchs visuels avant la fracture
+  for (let i = 0; i < 6; i++) {
+    playGlitchSound();
+    await glitch(60 + Math.random() * 100);
+    await sleep(80 + Math.random() * 120);
   }
-  requestAnimationFrame(draw);
-  await sleep((maxF/60)*1000+1000);
-  canvas.style.transition='opacity 3s ease'; canvas.style.opacity='0';
+
+  // Phase 2 : dessiner les fractures progressivement
+  // Point d'impact au centre
+  const cx = W / 2, cy = H / 2;
+
+  // Générer les lignes de fracture
+  const cracks = [];
+  const numCracks = 14;
+  for (let i = 0; i < numCracks; i++) {
+    const angle = (i / numCracks) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+    const len   = W * 0.6 + Math.random() * W * 0.4;
+    const segs  = [];
+    let x = cx, y = cy;
+    let a = angle;
+    const segCount = 8 + Math.floor(Math.random() * 6);
+    for (let s = 0; s < segCount; s++) {
+      a += (Math.random() - 0.5) * 0.3;
+      const segLen = len / segCount * (0.7 + Math.random() * 0.6);
+      const nx = x + Math.cos(a) * segLen;
+      const ny = y + Math.sin(a) * segLen;
+      segs.push({ x1: x, y1: y, x2: nx, y2: ny });
+      x = nx; y = ny;
+    }
+    cracks.push({ segs, drawn: 0, alpha: 0 });
+  }
+
+  // Générer les éclats (polygones entre fractures)
+  const shards = [];
+  for (let i = 0; i < 40; i++) {
+    const r = 30 + Math.random() * 200;
+    const a = Math.random() * Math.PI * 2;
+    const sx = cx + Math.cos(a) * r;
+    const sy = cy + Math.sin(a) * r;
+    const pts = [];
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let p = 0; p < n; p++) {
+      const pa = (p / n) * Math.PI * 2 + Math.random() * 0.5;
+      const pr = 20 + Math.random() * 80;
+      pts.push({ x: sx + Math.cos(pa) * pr, y: sy + Math.sin(pa) * pr });
+    }
+    shards.push({ pts, vx: (Math.random()-0.5)*3, vy: Math.random()*4+1, va: (Math.random()-0.5)*0.08, a: 0, alpha: 0.7, fallen: false });
+  }
+
+  let phase = 0; // 0=fractures, 1=éclats tombent, 2=noir
+  let crackProgress = 0;
+  let shardPhase = 0;
+  let blackAlpha = 0;
+
+  // Fond capturé (screenshot du end-overlay via canvas blanc)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  function drawFrame() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    if (phase === 0) {
+      // Dessiner les fractures progressivement
+      crackProgress += 0.04;
+      let allDone = true;
+      for (const crack of cracks) {
+        const targetDrawn = Math.floor(crackProgress * crack.segs.length);
+        if (crack.drawn < crack.segs.length) {
+          crack.drawn = Math.min(targetDrawn, crack.segs.length);
+          allDone = false;
+        }
+        crack.alpha = Math.min(crack.alpha + 0.06, 1);
+        ctx.strokeStyle = `rgba(180,200,180,${crack.alpha * 0.7})`;
+        ctx.lineWidth = 0.8;
+        ctx.shadowColor = 'rgba(0,255,65,0.4)';
+        ctx.shadowBlur = 3;
+        ctx.beginPath();
+        for (let s = 0; s < crack.drawn; s++) {
+          const seg = crack.segs[s];
+          if (s === 0) ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+        }
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+
+      // Point d'impact lumineux
+      const impactGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 30);
+      impactGlow.addColorStop(0, `rgba(0,255,65,${0.6 * Math.min(crackProgress, 1)})`);
+      impactGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = impactGlow;
+      ctx.fillRect(cx-40, cy-40, 80, 80);
+
+      if (allDone && crackProgress > 1.5) phase = 1;
+
+    } else if (phase === 1) {
+      // Fractures statiques
+      for (const crack of cracks) {
+        ctx.strokeStyle = `rgba(180,200,180,${0.5 - shardPhase * 0.5})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        crack.segs.forEach((seg, s) => {
+          if (s === 0) ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+        });
+        ctx.stroke();
+      }
+
+      // Éclats qui tombent
+      shardPhase += 0.012;
+      let activeShard = false;
+      for (const shard of shards) {
+        if (shard.fallen) continue;
+        activeShard = true;
+        shard.a += shard.va;
+        shard.vy += 0.15; // gravité
+        shard.pts = shard.pts.map(p => ({
+          x: p.x + shard.vx,
+          y: p.y + shard.vy,
+        }));
+        shard.alpha -= 0.008;
+        if (shard.alpha <= 0 || shard.pts[0].y > H + 100) { shard.fallen = true; continue; }
+
+        ctx.save();
+        ctx.globalAlpha = shard.alpha;
+        ctx.strokeStyle = 'rgba(100,180,100,0.6)';
+        ctx.fillStyle   = 'rgba(0,20,0,0.4)';
+        ctx.lineWidth   = 0.5;
+        ctx.beginPath();
+        shard.pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (!activeShard || shardPhase > 1) phase = 2;
+
+    } else if (phase === 2) {
+      blackAlpha += 0.015;
+      ctx.fillStyle = `rgba(0,0,0,${Math.min(blackAlpha, 1)})`;
+      ctx.fillRect(0, 0, W, H);
+
+      // Texte final au centre
+      if (blackAlpha > 0.8) {
+        const t = (blackAlpha - 0.8) / 0.2;
+        ctx.globalAlpha = Math.min(t, 1);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.font = '13px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.letterSpacing = '0.2em';
+        ctx.fillText('— fin du cauchemar —', cx, cy);
+        ctx.globalAlpha = 1;
+      }
+
+      if (blackAlpha >= 1.5) return; // stop
+    }
+
+    requestAnimationFrame(drawFrame);
+  }
+
+  requestAnimationFrame(drawFrame);
 }
 
 // MV-2134 fin — appelé depuis cmdEnregistrement via le bouton débloqué
