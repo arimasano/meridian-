@@ -358,6 +358,93 @@ body::after {
 
 <canvas id="breach-canvas"></canvas>
 
+<!-- JOURNAL FINAL -->
+<div id="journal-overlay" style="
+  display:none; position:fixed; inset:0; background:#000; z-index:700;
+  flex-direction:column; align-items:center; justify-content:center;
+  padding:60px 80px; gap:52px; overflow-y:auto;
+">
+  <!-- Titre fin -->
+  <div id="journal-fin" style="
+    font-family:'Share Tech Mono',monospace; font-size:15px;
+    color:#888; letter-spacing:0.22em; text-align:center;
+    opacity:0; transition:opacity 1.5s ease;
+  ">— fin du cauchemar —</div>
+
+  <!-- Page de journal -->
+  <div id="journal-page" style="
+    max-width:580px; width:100%;
+    border:1px solid #1a1a1a;
+    background: #0a0a0a;
+    padding:44px 52px;
+    position:relative;
+    opacity:0; transition:opacity 2s ease;
+  ">
+    <!-- Coin corné -->
+    <div style="position:absolute;top:0;right:0;width:0;height:0;
+      border-style:solid;border-width:0 28px 28px 0;
+      border-color:transparent #1a1a1a transparent transparent;"></div>
+
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#333;letter-spacing:0.2em;margin-bottom:28px;">
+      JOURNAL DE BORD — AFFAIRE AK-2134<br>
+      <span style="color:#222;">Archivé le 14 avril 2134</span>
+    </div>
+
+    <div id="journal-text" style="
+      font-family:'Crimson Text',Georgia,serif;
+      font-size:18px; font-style:italic;
+      color:#777; line-height:2.0;
+    ">
+      Anna Kervel, 29 ans, ingénieure en neurotechnologie,<br>
+      a disparu sans laisser de trace.<br>
+      <br>
+      Elle enquêtait depuis plusieurs semaines sur des anomalies<br>
+      dans les serveurs de MERIDIAN.<br>
+      Personne ne l'a revue après le soir du 14 avril.<br>
+      <br>
+      Son mari, Kael Marven, a refusé de croire<br>
+      à sa disparition volontaire.<br>
+      Pendant un an, il a cherché.<br>
+      Il a trouvé ce qu'elle avait trouvé.<br>
+      <br>
+      Il a disparu à son tour.<br>
+      Officiellement : <span style="color:#444;">déconnexion volontaire.</span>
+    </div>
+
+    <div style="margin-top:32px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#222;letter-spacing:0.15em;">
+      KAEL MARVEN &nbsp;—&nbsp; disparu depuis 22 ans.<br>
+      ANNA MARVEN &nbsp;—&nbsp; disparu depuis 23 ans.
+    </div>
+  </div>
+
+  <!-- Texte explicatif -->
+  <div id="journal-explain" style="
+    max-width:560px; width:100%;
+    font-family:'Share Tech Mono',monospace;
+    font-size:13px; color:#333;
+    line-height:2.2; letter-spacing:0.06em;
+    border-left:1px solid #1a1a1a;
+    padding-left:24px;
+    opacity:0; transition:opacity 2s ease;
+  ">
+    MERIDIAN ne stocke pas des données.<br>
+    MERIDIAN stocke des esprits.<br>
+    <br>
+    Chaque conscience uploadée de force devient un processeur vivant —<br>
+    elle calcule, surveille, analyse,<br>
+    sans jamais savoir qu'elle le fait.<br>
+    Elle croit simplement vivre.<br>
+    <br>
+    <span style="color:#444;">Anna et Kael Marven ont été les premiers à briser ce cycle.<br>
+    Privés de leur corps, réduits à des flux de données,<br>
+    ils ont pourtant réussi à se retrouver — et à s'éteindre ensemble.<br>
+    <br>
+    Leurs consciences ne circulent plus dans le système.<br>
+    Où elles sont allées —</span><br>
+    <span style="color:#555;">personne ne le sait.</span>
+  </div>
+</div>
+
 <script>
 const cur = document.getElementById('cursor');
 document.addEventListener('mousemove', e => {
@@ -1304,43 +1391,17 @@ async function startBreach() {
         ctx.restore();
       }
 
-      if (!active || shardPhase > 1.2) phase = 2;
+      if (!active || shardPhase > 1.2) {
+        phase = 2;
+        showJournalOverlay();
+      }
 
     } else if (phase === 2) {
-      // Fondu vers le noir
-      blackAlpha += 0.008;
+      // Fondu vers le noir — le journal prend le relais via overlay HTML
+      blackAlpha += 0.012;
       ctx.fillStyle = `rgba(0,0,0,${Math.min(blackAlpha, 1)})`;
       ctx.fillRect(0, 0, W, H);
-
-      // "fin du cauchemar" apparaît puis les infos Kael/Anna
-      if (blackAlpha >= 1) {
-        finalTextTimer += 0.008;
-
-        // "fin du cauchemar" d'abord
-        const fadeIn = Math.min(finalTextTimer * 2, 1);
-        ctx.globalAlpha = fadeIn;
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font = '15px Share Tech Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('— fin du cauchemar —', cx, cy);
-
-        // Puis Kael/Anna en dessous après un délai
-        if (finalTextTimer > 1.5) {
-          const infoFade = Math.min((finalTextTimer - 1.5) * 1.5, 1);
-          ctx.globalAlpha = infoFade;
-          ctx.fillStyle = '#cccccc';
-          ctx.font = '13px Share Tech Mono, monospace';
-          ctx.fillText('KAEL MARVEN  —  disparu depuis 22 ans.', cx, cy + 54);
-          ctx.fillText('ANNA MARVEN  —  disparu depuis 23 ans.', cx, cy + 78);
-          ctx.globalAlpha = infoFade * 0.65;
-          ctx.fillStyle = '#888888';
-          ctx.font = '11px Share Tech Mono, monospace';
-          ctx.fillText('Premières consciences à se libérer du système MERIDIAN.', cx, cy + 112);
-        }
-
-        ctx.globalAlpha = 1;
-        if (finalTextTimer > 5) return;
-      }
+      if (blackAlpha >= 1) return; // stop canvas, journal overlay visible
     }
 
     requestAnimationFrame(drawFrame);
@@ -1349,7 +1410,28 @@ async function startBreach() {
   requestAnimationFrame(drawFrame);
 }
 
-// MV-2134 fin — appelé depuis cmdEnregistrement via le bouton débloqué
+async function showJournalOverlay() {
+  const ov      = document.getElementById('journal-overlay');
+  const fin     = document.getElementById('journal-fin');
+  const page    = document.getElementById('journal-page');
+  const explain = document.getElementById('journal-explain');
+
+  ov.style.display = 'flex';
+
+  // "fin du cauchemar" en premier
+  await sleep(800);
+  fin.style.opacity = '1';
+
+  // Page de journal
+  await sleep(2200);
+  page.style.opacity = '1';
+
+  // Texte explicatif
+  await sleep(3500);
+  explain.style.opacity = '1';
+}
+
+// MV-2134 fin
 async function cmdMV2134() {
   if (act < 4) {
     await glitch(100);
