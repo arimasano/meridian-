@@ -294,12 +294,17 @@ body::after {
 /* GLOBAL */
 .glitch-body{animation:glitch-frame 0.15s ease;}
 @keyframes glitch-frame {
-  0%{transform:translateX(0) skewX(0)}
-  20%{transform:translateX(-4px) skewX(-1deg)}
-  40%{transform:translateX(4px) skewX(1deg)}
-  60%{transform:translateX(-2px)}
-  80%{transform:translateX(2px)}
-  100%{transform:translateX(0) skewX(0)}
+  0%  { transform: translateX(0) skewX(0) scaleY(1); filter:none; }
+  10% { transform: translateX(-8px) skewX(-2deg) scaleY(1.01); filter:hue-rotate(40deg) brightness(1.4); }
+  20% { transform: translateX(10px) skewX(2.5deg); filter:hue-rotate(-20deg); }
+  30% { transform: translateX(-6px) skewX(-1deg) scaleY(0.99); filter:brightness(1.6); }
+  40% { transform: translateX(8px) skewX(1.5deg); filter:hue-rotate(80deg); }
+  50% { transform: translateX(-10px) skewX(-3deg); filter:brightness(0.7); }
+  60% { transform: translateX(6px) skewX(2deg) scaleY(1.02); filter:none; }
+  70% { transform: translateX(-4px); filter:hue-rotate(30deg) brightness(1.3); }
+  80% { transform: translateX(5px) skewX(-1deg); filter:none; }
+  90% { transform: translateX(-3px) scaleY(0.99); filter:brightness(1.2); }
+  100%{ transform: translateX(0) skewX(0) scaleY(1); filter:none; }
 }
 @keyframes blink{50%{opacity:0}}
 </style>
@@ -420,6 +425,7 @@ function buildCommands() {
     if (unlocked) {
       b.addEventListener('click', async () => {
         if (busy) return;
+        playKeyClick();
         busy = true;
         if (hintTimer) clearTimeout(hintTimer);
         CB.querySelectorAll('.cmd-btn').forEach(x => x.classList.remove('key-step'));
@@ -485,6 +491,9 @@ function showFlashback(index) {
     const tx   = document.getElementById('flashback-text');
     const hint = document.getElementById('flashback-hint');
     await glitch(300);
+    // Fondu sortant du son terminal
+    fadeOutRain(1.5);
+    if (droneGain && audioCtx) droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
     ov.classList.add('active');
     tx.innerHTML = FLASHBACKS[index];
     hint.classList.remove('visible');
@@ -505,7 +514,10 @@ function showFlashback(index) {
       hint.classList.remove('visible');
       await sleep(700);
       ov.classList.remove('active');
+      // Fondu entrant du son terminal
       await sleep(300);
+      fadeInRain();
+      if (droneGain && audioCtx) droneGain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 2);
       resolve();
     }
     document.addEventListener('keydown', onKey);
@@ -862,74 +874,112 @@ async function startGame() {
 
 // ══ AUDIO ══
 let audioCtx = null;
-let droneNode = null;
-let droneGain = null;
+let masterGain = null;
+let droneGain  = null;
+let rainGain   = null;
 
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 1;
+  masterGain.connect(audioCtx.destination);
 
-  // Drone grave continu — bruit de fond terminal
-  const bufferSize = audioCtx.sampleRate * 2;
-  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.015;
+  const sr = audioCtx.sampleRate;
 
-  const noiseSource = audioCtx.createBufferSource();
-  noiseSource.buffer = buffer;
-  noiseSource.loop = true;
-
-  const biquad = audioCtx.createBiquadFilter();
-  biquad.type = 'lowpass';
-  biquad.frequency.value = 180;
-
-  // Oscillateur drone bas
-  const osc = audioCtx.createOscillator();
-  osc.type = 'sawtooth';
-  osc.frequency.value = 42;
-
-  const oscGain = audioCtx.createGain();
-  oscGain.gain.value = 0.04;
-
+  // ── Drone électronique très bas ──
+  const droneOsc = audioCtx.createOscillator();
+  droneOsc.type = 'sine';
+  droneOsc.frequency.value = 38;
+  const droneOsc2 = audioCtx.createOscillator();
+  droneOsc2.type = 'sine';
+  droneOsc2.frequency.value = 41.5; // léger battement
   droneGain = audioCtx.createGain();
-  droneGain.gain.value = 0.0;
+  droneGain.gain.value = 0;
+  droneOsc.connect(droneGain);
+  droneOsc2.connect(droneGain);
+  droneGain.connect(masterGain);
+  droneOsc.start(); droneOsc2.start();
+  droneGain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 4);
 
-  osc.connect(oscGain);
-  oscGain.connect(droneGain);
-  noiseSource.connect(biquad);
-  biquad.connect(droneGain);
-  droneGain.connect(audioCtx.destination);
+  // ── Pluie légère ──
+  const rainBuf = audioCtx.createBuffer(1, sr * 3, sr);
+  const rainData = rainBuf.getChannelData(0);
+  for (let i = 0; i < rainData.length; i++) rainData[i] = (Math.random() * 2 - 1);
+  const rainSrc = audioCtx.createBufferSource();
+  rainSrc.buffer = rainBuf; rainSrc.loop = true;
+  const rainHp = audioCtx.createBiquadFilter();
+  rainHp.type = 'highpass'; rainHp.frequency.value = 4000;
+  const rainLp = audioCtx.createBiquadFilter();
+  rainLp.type = 'lowpass'; rainLp.frequency.value = 10000;
+  rainGain = audioCtx.createGain();
+  rainGain.gain.value = 0;
+  rainSrc.connect(rainHp); rainHp.connect(rainLp); rainLp.connect(rainGain);
+  rainGain.connect(masterGain);
+  rainSrc.start();
+  rainGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 5);
+}
 
-  osc.start();
-  noiseSource.start();
-
-  // Fade in progressif
-  droneGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 3);
+function playKeyClick() {
+  if (!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.3));
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = 0.04;
+  const f = audioCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3500;
+  src.connect(f); f.connect(g); g.connect(masterGain);
+  src.start();
 }
 
 function playGlitchSound() {
   if (!audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'square';
-  osc.frequency.value = 80 + Math.random() * 400;
-  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + 0.08);
+  // Bruit court descendant — électronique, pas robotique
+  const dur = 0.06 + Math.random() * 0.07;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+  }
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = 0.06;
+  const f = audioCtx.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 600 + Math.random() * 1200;
+  f.Q.value = 0.8;
+  src.connect(f); f.connect(g); g.connect(masterGain);
+  src.start();
 }
 
-async function shutdownSound() {
-  if (!audioCtx || !droneGain) return;
-  // Descente progressive sur 6 secondes
-  droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 6);
-  // Quelques glitchs finaux
-  for (let i = 0; i < 4; i++) {
-    await sleep(600 + Math.random() * 800);
-    playGlitchSound();
-  }
+function fadeOutAudio(seconds) {
+  if (!masterGain || !audioCtx) return;
+  masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + seconds);
+}
+
+function fadeOutRain(seconds) {
+  if (!rainGain || !audioCtx) return;
+  rainGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + seconds);
+}
+
+function fadeInRain() {
+  if (!rainGain || !audioCtx) return;
+  rainGain.gain.linearRampToValueAtTime(0.055, audioCtx.currentTime + 2);
+}
+
+async function playShutdown() {
+  if (!audioCtx) return;
+  // Son de machine qui s'éteint : pitch descendant
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+  osc.frequency.linearRampToValueAtTime(18, audioCtx.currentTime + 5);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.07, audioCtx.currentTime);
+  g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 5);
+  const f = audioCtx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300;
+  osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 5.5);
 }
 
 // ══ FIN ══
@@ -937,7 +987,7 @@ async function startEnding() {
   busy = true; disableAll();
   initAudio();
   await sleep(2000);
-  playGlitchSound(); await glitch(500);
+  await glitch(500);
   document.getElementById('loop-counter').classList.add('blink-loop');
   await sleep(3000);
 
@@ -970,43 +1020,34 @@ async function showAnnaResponse() {
   const endFinal = document.getElementById('end-final');
   const contHint = document.getElementById('end-continue');
 
-  // Cache la question
   endQ.classList.remove('visible');
-  await sleep(1500);
+  // Fondu de la pluie pour la scène finale
+  fadeOutRain(2);
+  await sleep(1800);
 
-  // Lignes du dialogue
   const dialogueLines = [
-    { sender: '——— :', text: 'Kael..? C\'est toi ?', cls: '' },
-    { sender: '——— :', text: 'Tu vis cette boucle depuis bien trop longtemps..', cls: '' },
-    { sender: '——— :', text: 'C\'est moi..', cls: '' },
-    { sender: 'Anna :', text: 'ta femme. Anna.', cls: 'reveal-name' },
+    { sender: '——— :', text: 'Kael..? C\'est toi ?',                               cls: '' },
+    { sender: '——— :', text: 'Tu vis cette boucle depuis bien trop longtemps..',    cls: '' },
+    { sender: '——— :', text: 'C\'est moi..',                                        cls: '' },
+    { sender: 'Anna :', text: 'ta femme. Anna.',                                    cls: 'reveal-name' },
     { sender: 'Anna :', text: 'Il est temps d\'abandonner, et d\'accepter la mort..', cls: 'last-line' },
   ];
 
   for (const [i, dl] of dialogueLines.entries()) {
-    await sleep(i === 0 ? 400 : 2200);
-    playGlitchSound();
+    // Délai plus long entre les lignes — pas de son de glitch
+    await sleep(i === 0 ? 500 : 3200);
     const div = document.createElement('div');
     div.className = 'anna-line ' + dl.cls;
     div.innerHTML = `<span class="anna-sender">${dl.sender}</span>${dl.text}`;
     dialogue.appendChild(div);
-    await sleep(60);
+    await sleep(80);
     div.classList.add('visible');
   }
 
-  await sleep(2000);
-
-  // Texte final + attendre touche
-  endFinal.innerHTML =
-    'KAEL MARVEN &nbsp;—&nbsp; disparu depuis 22 ans.<br>' +
-    'ANNA MARVEN &nbsp;—&nbsp; disparu depuis 23 ans.<br><br>' +
-    '<span style="color:#333;font-size:12px;letter-spacing:0.15em;">Premières consciences à se libérer du système MERIDIAN.</span>';
-  endFinal.classList.add('visible');
-
-  await sleep(1000);
+  await sleep(3500);
   contHint.style.display = 'block';
 
-  // Attendre touche
+  // Attendre touche — PAS de texte Kael/Anna ici
   await new Promise(resolve => {
     function onKey(e) {
       document.removeEventListener('keydown', onKey);
@@ -1026,70 +1067,80 @@ async function startBreach() {
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   canvas.classList.add('active');
-
-  // Masquer le fond
   document.getElementById('end-overlay').style.opacity = '0';
 
-  // Lancer l'extinction sonore
-  shutdownSound();
+  // Son d'extinction
+  playShutdown();
+  fadeOutAudio(8);
 
   const W = canvas.width, H = canvas.height;
 
-  // Phase 1 : glitchs visuels avant la fracture
-  for (let i = 0; i < 6; i++) {
+  // Quelques glitchs visuels d'intro
+  for (let i = 0; i < 5; i++) {
     playGlitchSound();
-    await glitch(60 + Math.random() * 100);
-    await sleep(80 + Math.random() * 120);
+    await glitch(70 + Math.random() * 90);
+    await sleep(120 + Math.random() * 160);
   }
 
-  // Phase 2 : dessiner les fractures progressivement
-  // Point d'impact au centre
   const cx = W / 2, cy = H / 2;
 
-  // Générer les lignes de fracture
+  // Générer fractures — plus épaisses et visibles
   const cracks = [];
-  const numCracks = 14;
-  for (let i = 0; i < numCracks; i++) {
-    const angle = (i / numCracks) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-    const len   = W * 0.6 + Math.random() * W * 0.4;
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const len   = W * 0.55 + Math.random() * W * 0.45;
     const segs  = [];
-    let x = cx, y = cy;
-    let a = angle;
-    const segCount = 8 + Math.floor(Math.random() * 6);
+    let x = cx, y = cy, a = angle;
+    const segCount = 10 + Math.floor(Math.random() * 5);
     for (let s = 0; s < segCount; s++) {
-      a += (Math.random() - 0.5) * 0.3;
-      const segLen = len / segCount * (0.7 + Math.random() * 0.6);
-      const nx = x + Math.cos(a) * segLen;
-      const ny = y + Math.sin(a) * segLen;
-      segs.push({ x1: x, y1: y, x2: nx, y2: ny });
+      a += (Math.random() - 0.5) * 0.35;
+      const sl = len / segCount * (0.6 + Math.random() * 0.8);
+      const nx = x + Math.cos(a) * sl;
+      const ny = y + Math.sin(a) * sl;
+      segs.push({ x1:x, y1:y, x2:nx, y2:ny });
       x = nx; y = ny;
     }
-    cracks.push({ segs, drawn: 0, alpha: 0 });
-  }
-
-  // Générer les éclats (polygones entre fractures)
-  const shards = [];
-  for (let i = 0; i < 40; i++) {
-    const r = 30 + Math.random() * 200;
-    const a = Math.random() * Math.PI * 2;
-    const sx = cx + Math.cos(a) * r;
-    const sy = cy + Math.sin(a) * r;
-    const pts = [];
-    const n = 3 + Math.floor(Math.random() * 3);
-    for (let p = 0; p < n; p++) {
-      const pa = (p / n) * Math.PI * 2 + Math.random() * 0.5;
-      const pr = 20 + Math.random() * 80;
-      pts.push({ x: sx + Math.cos(pa) * pr, y: sy + Math.sin(pa) * pr });
+    // Fractures secondaires
+    const branches = [];
+    for (let b = 0; b < 2; b++) {
+      const bi = Math.floor(Math.random() * segs.length);
+      const ba = angle + (Math.random() - 0.5) * 1.2;
+      const bl = len * 0.3;
+      branches.push({ x1: segs[bi].x2, y1: segs[bi].y2, x2: segs[bi].x2 + Math.cos(ba)*bl, y2: segs[bi].y2 + Math.sin(ba)*bl });
     }
-    shards.push({ pts, vx: (Math.random()-0.5)*3, vy: Math.random()*4+1, va: (Math.random()-0.5)*0.08, a: 0, alpha: 0.7, fallen: false });
+    cracks.push({ segs, branches, drawn: 0, alpha: 0 });
   }
 
-  let phase = 0; // 0=fractures, 1=éclats tombent, 2=noir
+  // Éclats — plus grands, plus lents
+  const shards = [];
+  for (let i = 0; i < 55; i++) {
+    const r = 20 + Math.random() * 280;
+    const a = Math.random() * Math.PI * 2;
+    const sx = cx + Math.cos(a) * r, sy = cy + Math.sin(a) * r;
+    const pts = [];
+    const n = 3 + Math.floor(Math.random() * 4);
+    for (let p = 0; p < n; p++) {
+      const pa = (p / n) * Math.PI * 2 + Math.random() * 0.6;
+      const pr = 25 + Math.random() * 100;
+      pts.push({ x: sx + Math.cos(pa)*pr, y: sy + Math.sin(pa)*pr });
+    }
+    shards.push({
+      pts,
+      vx: (Math.random()-0.5) * 1.2,
+      vy: Math.random() * 1.8 + 0.4,  // gravité douce
+      va: (Math.random()-0.5) * 0.03,
+      alpha: 0.85,
+      fallen: false,
+    });
+  }
+
+  let phase = 0;
   let crackProgress = 0;
   let shardPhase = 0;
   let blackAlpha = 0;
+  let finalTextAlpha = 0;
+  let finalTextTimer = 0;
 
-  // Fond capturé (screenshot du end-overlay via canvas blanc)
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
@@ -1099,100 +1150,115 @@ async function startBreach() {
     ctx.fillRect(0, 0, W, H);
 
     if (phase === 0) {
-      // Dessiner les fractures progressivement
-      crackProgress += 0.04;
+      // Fractures — progression plus lente
+      crackProgress += 0.018;
       let allDone = true;
       for (const crack of cracks) {
-        const targetDrawn = Math.floor(crackProgress * crack.segs.length);
-        if (crack.drawn < crack.segs.length) {
-          crack.drawn = Math.min(targetDrawn, crack.segs.length);
-          allDone = false;
-        }
-        crack.alpha = Math.min(crack.alpha + 0.06, 1);
-        ctx.strokeStyle = `rgba(180,200,180,${crack.alpha * 0.7})`;
-        ctx.lineWidth = 0.8;
-        ctx.shadowColor = 'rgba(0,255,65,0.4)';
-        ctx.shadowBlur = 3;
+        const target = Math.floor(crackProgress * crack.segs.length);
+        if (crack.drawn < crack.segs.length) { crack.drawn = Math.min(target, crack.segs.length); allDone = false; }
+        crack.alpha = Math.min(crack.alpha + 0.04, 1);
+
+        // Ligne principale
+        ctx.strokeStyle = `rgba(200,220,200,${crack.alpha * 0.85})`;
+        ctx.lineWidth = 1.4;
+        ctx.shadowColor = 'rgba(0,255,65,0.5)';
+        ctx.shadowBlur = 5;
         ctx.beginPath();
-        for (let s = 0; s < crack.drawn; s++) {
-          const seg = crack.segs[s];
-          if (s === 0) ctx.moveTo(seg.x1, seg.y1);
-          ctx.lineTo(seg.x2, seg.y2);
-        }
+        crack.segs.slice(0, crack.drawn).forEach((seg, s) => {
+          s === 0 ? ctx.moveTo(seg.x1, seg.y1) : ctx.lineTo(seg.x2, seg.y2);
+        });
         ctx.stroke();
+
+        // Branches
+        if (crack.drawn >= crack.segs.length * 0.5) {
+          ctx.lineWidth = 0.6;
+          ctx.strokeStyle = `rgba(180,200,180,${crack.alpha * 0.5})`;
+          crack.branches.forEach(b => {
+            ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+          });
+        }
       }
       ctx.shadowBlur = 0;
 
-      // Point d'impact lumineux
-      const impactGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 30);
-      impactGlow.addColorStop(0, `rgba(0,255,65,${0.6 * Math.min(crackProgress, 1)})`);
-      impactGlow.addColorStop(1, 'transparent');
-      ctx.fillStyle = impactGlow;
-      ctx.fillRect(cx-40, cy-40, 80, 80);
+      // Point d'impact
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 45);
+      glow.addColorStop(0, `rgba(0,255,65,${0.8 * Math.min(crackProgress, 1)})`);
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(cx-60, cy-60, 120, 120);
 
-      if (allDone && crackProgress > 1.5) phase = 1;
+      if (allDone && crackProgress > 2.2) phase = 1;
 
     } else if (phase === 1) {
-      // Fractures statiques
+      // Fractures qui s'estompent
+      const fadeF = Math.max(0, 0.8 - shardPhase * 0.8);
       for (const crack of cracks) {
-        ctx.strokeStyle = `rgba(180,200,180,${0.5 - shardPhase * 0.5})`;
-        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = `rgba(200,220,200,${fadeF})`;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
-        crack.segs.forEach((seg, s) => {
-          if (s === 0) ctx.moveTo(seg.x1, seg.y1);
-          ctx.lineTo(seg.x2, seg.y2);
-        });
+        crack.segs.forEach((seg, s) => { s === 0 ? ctx.moveTo(seg.x1, seg.y1) : ctx.lineTo(seg.x2, seg.y2); });
         ctx.stroke();
       }
 
-      // Éclats qui tombent
-      shardPhase += 0.012;
-      let activeShard = false;
+      // Éclats tombants — plus lents
+      shardPhase += 0.005;
+      let active = false;
       for (const shard of shards) {
         if (shard.fallen) continue;
-        activeShard = true;
-        shard.a += shard.va;
-        shard.vy += 0.15; // gravité
-        shard.pts = shard.pts.map(p => ({
-          x: p.x + shard.vx,
-          y: p.y + shard.vy,
-        }));
-        shard.alpha -= 0.008;
-        if (shard.alpha <= 0 || shard.pts[0].y > H + 100) { shard.fallen = true; continue; }
-
+        active = true;
+        shard.vy += 0.04; // gravité douce
+        shard.pts = shard.pts.map(p => ({ x: p.x + shard.vx, y: p.y + shard.vy }));
+        shard.alpha -= 0.003;
+        if (shard.alpha <= 0 || shard.pts[0].y > H + 150) { shard.fallen = true; continue; }
         ctx.save();
         ctx.globalAlpha = shard.alpha;
-        ctx.strokeStyle = 'rgba(100,180,100,0.6)';
-        ctx.fillStyle   = 'rgba(0,20,0,0.4)';
-        ctx.lineWidth   = 0.5;
+        ctx.strokeStyle = 'rgba(120,200,120,0.7)';
+        ctx.fillStyle   = 'rgba(0,30,0,0.35)';
+        ctx.lineWidth   = 0.8;
+        ctx.shadowColor = 'rgba(0,255,65,0.2)';
+        ctx.shadowBlur  = 4;
         ctx.beginPath();
         shard.pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.restore();
       }
 
-      if (!activeShard || shardPhase > 1) phase = 2;
+      if (!active || shardPhase > 1.2) phase = 2;
 
     } else if (phase === 2) {
-      blackAlpha += 0.015;
+      // Fondu vers le noir
+      blackAlpha += 0.008;
       ctx.fillStyle = `rgba(0,0,0,${Math.min(blackAlpha, 1)})`;
       ctx.fillRect(0, 0, W, H);
 
-      // Texte final au centre
-      if (blackAlpha > 0.8) {
-        const t = (blackAlpha - 0.8) / 0.2;
-        ctx.globalAlpha = Math.min(t, 1);
-        ctx.fillStyle = '#1a1a1a';
-        ctx.font = '13px Share Tech Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.letterSpacing = '0.2em';
-        ctx.fillText('— fin du cauchemar —', cx, cy);
-        ctx.globalAlpha = 1;
-      }
+      // "fin du cauchemar" apparaît puis les infos Kael/Anna
+      if (blackAlpha >= 1) {
+        finalTextTimer += 0.008;
 
-      if (blackAlpha >= 1.5) return; // stop
+        // "fin du cauchemar" d'abord
+        const fadeIn = Math.min(finalTextTimer * 2, 1);
+        ctx.globalAlpha = fadeIn;
+        ctx.fillStyle = '#2a2a2a';
+        ctx.font = '14px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('— fin du cauchemar —', cx, cy);
+
+        // Puis Kael/Anna en dessous après un délai
+        if (finalTextTimer > 1.5) {
+          const infoFade = Math.min((finalTextTimer - 1.5) * 1.5, 1);
+          ctx.globalAlpha = infoFade * 0.7;
+          ctx.fillStyle = '#333';
+          ctx.font = '12px Share Tech Mono, monospace';
+          ctx.fillText('KAEL MARVEN  —  disparu depuis 22 ans.', cx, cy + 50);
+          ctx.fillText('ANNA MARVEN  —  disparu depuis 23 ans.', cx, cy + 74);
+          ctx.globalAlpha = infoFade * 0.4;
+          ctx.font = '10px Share Tech Mono, monospace';
+          ctx.fillText('Premières consciences à se libérer du système MERIDIAN.', cx, cy + 106);
+        }
+
+        ctx.globalAlpha = 1;
+        if (finalTextTimer > 4) return; // fin totale
+      }
     }
 
     requestAnimationFrame(drawFrame);
