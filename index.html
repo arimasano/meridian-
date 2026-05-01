@@ -378,7 +378,7 @@ let dynamicCommands = [];
 let ambientAudio = null;
 
 // Vitesse de frappe en ms par caractère
-const TYPING_SPEED = 28;
+const TYPING_SPEED = 14;
 
 function addLine(text, cls='l-resp', delay=0) {
   return new Promise(async resolve => {
@@ -866,6 +866,13 @@ async function showIntro() {
   document.getElementById('menu').style.display = 'none';
   const screen = document.getElementById('intro-screen');
   screen.style.display = 'flex';
+
+  // Lancer la musique dès la mise en contexte
+  initAudio();
+  ambientAudio = new Audio('sounds/ambient.mp3');
+  ambientAudio.loop = true;
+  ambientAudio.volume = 0.35;
+  ambientAudio.play().catch(() => {});
   const introLines = [
     'Année 2157.',
     '&nbsp;',
@@ -920,10 +927,6 @@ async function startGame() {
   act = 1;
   unlockedIndex = 0;
   initAudio();
-  ambientAudio = new Audio('sounds/ambient.mp3');
-  ambientAudio.loop = true;
-  ambientAudio.volume = 0.35;
-  ambientAudio.play().catch(() => {});
   buildCommands();
   scheduleHint();
 }
